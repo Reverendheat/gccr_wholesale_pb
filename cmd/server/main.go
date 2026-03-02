@@ -1,0 +1,51 @@
+package main
+
+import (
+	"log"
+	"os"
+
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/plugins/migratecmd"
+
+	_ "github.com/reverendheat/gccr_invoice/pb_migrations"
+
+	"github.com/reverendheat/gccr_invoice/internal/hooks"
+	"github.com/reverendheat/gccr_invoice/internal/routes"
+	"github.com/reverendheat/gccr_invoice/internal/scheduler"
+	"github.com/reverendheat/gccr_invoice/internal/square"
+)
+
+func main() {
+	app := pocketbase.New()
+
+	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
+		Automigrate: true,
+	})
+
+	sqCfg := square.Config{
+		AccessToken: os.Getenv("SQUARE_ACCESS_TOKEN"),
+		Sandbox:     os.Getenv("SQUARE_SANDBOX") == "true",
+	}
+	if sqCfg.AccessToken == "" {
+		log.Fatal("SQUARE_ACCESS_TOKEN environment variable is required")
+	}
+
+	locationID := os.Getenv("SQUARE_LOCATION_ID")
+	if locationID == "" {
+		log.Fatal("SQUARE_LOCATION_ID environment variable is required")
+	}
+
+	sq := square.New(sqCfg)
+	hooks.Register(app, sq)
+	scheduler.Register(app, sq, locationID)
+
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		routes.Register(se, sq, locationID)
+		return se.Next()
+	})
+
+	if err := app.Start(); err != nil {
+		log.Fatal(err)
+	}
+}

@@ -1,0 +1,133 @@
+.orders-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+.orders-table th, .orders-table td {
+  padding: 0.75rem 1rem; text-align: left;
+  border-bottom: 1px solid var(--border); font-size: 0.875rem;
+}
+.orders-table th { font-weight: 600; color: var(--text-muted); background: var(--surface); }
+.orders-table tr:hover td { background: var(--surface); }
+.orders-table-clickable tbody tr { cursor: pointer; }
+.orders-table-clickable tbody tr.row-selected td { background: #e8e8e8; }
+.mono { font-family: monospace; font-size: 0.82rem; }
+.notes-cell { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.muted { color: var(--text-muted); }
+.staff-error { color: var(--error); }
+
+/* Order detail drawer */
+.drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.2);
+  z-index: 100;
+}
+.order-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 480px; max-width: 95vw;
+  background: var(--bg); border-left: 1px solid var(--border);
+  z-index: 101; display: flex; flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+.drawer-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.drawer-title { font-size: 1rem; font-weight: 700; margin: 0 0 0.15rem; }
+.drawer-id { font-size: 0.78rem; color: var(--text-muted); }
+.drawer-close {
+  background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+  width: 30px; height: 30px; padding: 0; font-size: 0.85rem; border-radius: var(--radius);
+  cursor: pointer; flex-shrink: 0; margin-top: 2px;
+}
+.drawer-close:hover { background: var(--bg); color: var(--text); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+.drawer-section {}
+.drawer-section-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin: 0 0 0.75rem; }
+.drawer-meta-grid { display: flex; flex-direction: column; gap: 0.75rem; }
+.meta-row { display: grid; grid-template-columns: 100px 1fr; gap: 0.5rem; font-size: 0.875rem; align-items: start; }
+.meta-label { font-weight: 600; color: var(--text-muted); padding-top: 1px; }
+.meta-sub { font-size: 0.8rem; color: var(--text-muted); }
+
+.drawer-status-control { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.status-select {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0.3rem 0.6rem; font-size: 0.875rem; background: var(--surface);
+  color: var(--text); cursor: pointer;
+}
+.status-select:focus { outline: none; border-color: var(--primary); }
+
+.drawer-items-table { width: 100%; border-collapse: collapse; }
+.drawer-items-table th, .drawer-items-table td {
+  padding: 0.5rem 0.6rem; text-align: left; font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+}
+.drawer-items-table th { font-weight: 600; color: var(--text-muted); background: var(--surface); }
+
+.drawer-notes {
+  font-size: 0.875rem; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0.75rem 1rem; margin: 0; white-space: pre-wrap;
+}
+
+/* Invoice section */
+.invoice-sent { display: flex; flex-direction: column; gap: 0.35rem; }
+.invoice-sent-label { font-size: 0.82rem; font-weight: 600; color: #1e8e3e; }
+.invoice-id { font-size: 0.8rem; color: var(--text-muted); }
+.invoice-link { font-size: 0.85rem; color: var(--primary); text-decoration: none; }
+.invoice-link:hover { text-decoration: underline; }
+.invoice-action { display: flex; flex-direction: column; gap: 0.75rem; }
+.btn-send-invoice {
+  align-self: flex-start;
+  padding: 0.45rem 1.1rem; font-size: 0.875rem; font-weight: 600;
+  background: #059669; color: #fff; border: none; border-radius: var(--radius);
+  cursor: pointer;
+}
+.btn-send-invoice:hover:not(:disabled) { background: #047857; }
+.btn-send-invoice:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Section header with action button */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+.section-header h2 { margin: 0; }
+
+.staff-success {
+  color: #065f46; background: #d1fae5;
+  border: 1px solid #6ee7b7; border-radius: var(--radius);
+  padding: 0.6rem 1rem; font-size: 0.875rem; margin: 0.75rem 0;
+}
+
+/* Invite modal */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.25);
+  z-index: 200; display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.modal-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  padding: 2rem; width: 100%; max-width: 420px;
+}
+.modal-card h3 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.modal-desc { font-size: 0.875rem; color: var(--text-muted); margin: 0 0 1.25rem; }
+.invite-form { display: flex; flex-direction: column; gap: 1rem; }
+.invite-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem; font-weight: 500; }
+.modal-error { margin: 0; font-size: 0.85rem; }
+.modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.25rem; }
+.btn-secondary {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text); border-radius: var(--radius);
+  padding: 0.45rem 1rem; font-size: 0.875rem; cursor: pointer;
+}
+.btn-secondary:hover { background: var(--bg); }
+
+.status-badge {
+  display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600; text-transform: capitalize;
+}
+.status-pending   { background: #fef3c7; color: #92400e; }
+.status-confirmed { background: #dbeafe; color: #1e40af; }
+.status-delivered { background: #d1fae5; color: #065f46; }
+.status-invoiced  { background: #ede9fe; color: #5b21b6; }
+.status-paid      { background: #d1fae5; color: #065f46; }
+.status-cancelled { background: #fee2e2; color: #991b1b; }

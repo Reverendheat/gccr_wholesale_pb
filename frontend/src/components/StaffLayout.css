@@ -1,0 +1,88 @@
+.staff-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.staff-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 1rem;
+  gap: 2rem;
+}
+
+.sidebar-logo {
+  padding: 0.25rem 0.25rem 0.5rem;
+}
+.sidebar-logo-img {
+  width: 100%;
+  max-width: 190px;
+  height: auto;
+  display: block;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.sidebar-nav a {
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sidebar-nav a:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.sidebar-nav a.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 0.25rem;
+}
+
+.sidebar-user {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.sidebar-logout {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.4rem 0.75rem;
+}
+
+.sidebar-logout:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Main content */
+.staff-main {
+  flex: 1;
+  padding: 2rem;
+  background: var(--bg);
+  overflow-y: auto;
+}
