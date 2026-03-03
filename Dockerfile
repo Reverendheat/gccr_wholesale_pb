@@ -17,7 +17,10 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o server ./cmd/server
+# GOGC=off disables the GC during the build, reducing peak RSS on small instances.
+# GOMAXPROCS=1 avoids parallel compilation spikes that can OOM a 1-2GB server.
+RUN CGO_ENABLED=0 GOOS=linux GOGC=off GOMAXPROCS=1 \
+    go build -ldflags="-s -w" -o server ./cmd/server
 
 # Stage 3: Minimal runtime image
 FROM alpine:3.21
