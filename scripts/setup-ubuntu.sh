@@ -73,32 +73,19 @@ else
   ok "Docker already installed: $(docker --version)"
 fi
 
-# ── 4. swap (prevents OOM during Go build on low-memory instances) ───────────
+# ── 4. swap (small amount for runtime safety) ────────────────────────────────
 SWAP_FILE="/swapfile"
 if swapon --show | grep -q "$SWAP_FILE"; then
   ok "Swap already active"
 else
-  info "Creating 2GB swap file (needed for Go build on small instances)…"
-  fallocate -l 2G "$SWAP_FILE"
+  info "Creating 1GB swap file…"
+  fallocate -l 1G "$SWAP_FILE"
   chmod 600 "$SWAP_FILE"
   mkswap "$SWAP_FILE"
   swapon "$SWAP_FILE"
-  # Persist across reboots
   grep -q "$SWAP_FILE" /etc/fstab || echo "$SWAP_FILE none swap sw 0 0" >> /etc/fstab
-  ok "Swap enabled (2GB)"
+  ok "Swap enabled (1GB)"
 fi
-
-# ── 5. firewall (ufw) ────────────────────────────────────────────────────────
-# info "Configuring UFW firewall…"
-# ufw --force reset
-# ufw default deny incoming
-# ufw default allow outgoing
-# ufw allow ssh
-# ufw allow 80/tcp
-# ufw allow 443/tcp
-# ufw allow 443/udp
-# ufw --force enable
-# ok "Firewall enabled (ssh + 80 + 443 open)"
 
 # ── 5. fetch secrets from SSM ────────────────────────────────────────────────
 info "Fetching parameters from SSM (${SSM_PREFIX}/*)…"
@@ -108,8 +95,7 @@ ADMIN_EMAIL=$(ssm_get "admin_email")
 ADMIN_PASSWORD=$(ssm_get "admin_password" secure)
 ok "SSM parameters loaded"
 
-# ── 6. clone / update repo ───────────────────────────────────────────────────
-# Embed the GitHub token in the remote URL for private repo access.
+# ── 6. clone / update repo (for compose + Caddyfile only, no build needed) ──
 REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/Reverendheat/gccr_wholesale_pb.git"
 
 if [[ -d "$APP_DIR/.git" ]]; then
@@ -128,13 +114,17 @@ info "Writing .env from SSM…"
 printf '%s\n' "$ENV_FILE_CONTENT" > .env
 ok ".env written"
 
-# ── 8. build & start ─────────────────────────────────────────────────────────
-info "Building and starting Docker stack…"
-docker compose up -d --build
+# ── 8. authenticate with GHCR & pull + start ─────────────────────────────────
+info "Logging in to GitHub Container Registry…"
+echo "${GITHUB_TOKEN}" | docker login ghcr.io -u Reverendheat --password-stdin
+ok "GHCR login successful"
+
+info "Pulling latest images and starting stack…"
+docker compose pull
+docker compose up -d
 ok "Stack is up"
 
 # ── 9. create PocketBase superuser ───────────────────────────────────────────
-# Wait for the app to be healthy before creating the admin account.
 info "Waiting for app to be healthy…"
 for i in $(seq 1 30); do
   if docker compose exec -T app wget -qO- http://localhost:8090/api/health &>/dev/null; then
@@ -157,6 +147,6 @@ echo ""
 echo "  Useful commands (run from $APP_DIR):"
 echo "    docker compose logs -f          # tail logs"
 echo "    docker compose ps               # container status"
-echo "    docker compose up -d --build    # redeploy after a push"
+echo "    docker compose pull && docker compose up -d  # redeploy after a push"
 echo "    docker compose down             # stop the stack"
 echo ""

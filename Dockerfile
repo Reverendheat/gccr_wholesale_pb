@@ -26,7 +26,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOGC=off GOMAXPROCS=1 \
 FROM alpine:3.21
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata wget
 
 # Copy the binary and the built frontend (served via PocketBase --publicDir)
 COPY --from=backend /app/server ./server

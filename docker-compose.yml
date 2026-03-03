@@ -1,6 +1,6 @@
 services:
   app:
-    build: .
+    image: ghcr.io/reverendheat/gccr_wholesale_pb:latest
     restart: unless-stopped
     env_file: .env
     expose:
