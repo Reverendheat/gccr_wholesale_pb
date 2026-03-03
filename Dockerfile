@@ -8,8 +8,8 @@ ENV PATH=/app/frontend/node_modules/.bin:$PATH
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-# Build the production bundle; vite sets NODE_ENV=production internally.
-RUN npx tsc -b && npx vite build
+# Build the production bundle via the package.json "build" script.
+RUN npm run build
 
 # Stage 2: Build the Go binary
 FROM golang:1.24-alpine AS backend
