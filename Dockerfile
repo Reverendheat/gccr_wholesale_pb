@@ -1,14 +1,10 @@
 # Stage 1: Build the React frontend
-FROM node:20-alpine AS frontend
+FROM node:22-alpine AS frontend
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci --include=dev && \
-    echo "--- node version ---" && node -v && \
-    echo "--- npm version ---" && npm -v && \
-    echo "--- node_modules/.bin contents ---" && ls -la node_modules/.bin/ | head -20 && \
-    echo "--- tsc check ---" && ls -la node_modules/.bin/tsc
+RUN npm ci
 COPY frontend/ ./
-RUN node_modules/.bin/tsc -b && node_modules/.bin/vite build
+RUN npm run build
 
 # Stage 2: Build the Go binary
 FROM golang:1.24-alpine AS backend
