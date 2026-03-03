@@ -1,5 +1,5 @@
-# Stage 1: Build the React frontend
-FROM node:22-alpine AS frontend
+# Stage 1: Build the React frontend (Debian-slim avoids npm+musl crashes in BuildKit)
+FROM node:22-slim AS frontend
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
