@@ -9,7 +9,7 @@ COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 # Build the production bundle; vite sets NODE_ENV=production internally.
-RUN tsc -b && vite build
+RUN npx tsc -b && npx vite build
 
 # Stage 2: Build the Go binary
 FROM golang:1.24-alpine AS backend
