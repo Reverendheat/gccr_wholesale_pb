@@ -21,12 +21,15 @@ jobs:
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Lowercase image name
+        run: echo "IMAGE=$(echo $REGISTRY/$IMAGE_NAME | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Build image
         run: |
           docker build \
-            -t $REGISTRY/$IMAGE_NAME:latest \
-            -t $REGISTRY/$IMAGE_NAME:sha-${GITHUB_SHA::7} \
+            -t $IMAGE:latest \
+            -t $IMAGE:sha-${GITHUB_SHA::7} \
             .
 
       - name: Push image
-        run: docker push $REGISTRY/$IMAGE_NAME --all-tags
+        run: docker push $IMAGE --all-tags
