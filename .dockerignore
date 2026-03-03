@@ -1,6 +1,5 @@
 pb_data/
 **/node_modules
-frontend/dist/
 .env
 .env.production
 *.db
