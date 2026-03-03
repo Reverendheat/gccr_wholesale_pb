@@ -1,15 +1,10 @@
 # Stage 1: Build the React frontend
 FROM node:20-alpine AS frontend
 WORKDIR /app/frontend
-# NODE_ENV=development ensures devDependencies (tsc, vite, etc.) are installed.
-ENV NODE_ENV=development
-# Expose local bin so tsc/vite are always resolvable regardless of npm PATH behaviour.
-ENV PATH=/app/frontend/node_modules/.bin:$PATH
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 COPY frontend/ ./
-# Build the production bundle via the package.json "build" script.
-RUN npm run build
+RUN ./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build
 
 # Stage 2: Build the Go binary
 FROM golang:1.24-alpine AS backend
