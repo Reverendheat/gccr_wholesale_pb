@@ -26,8 +26,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm install -g npm@latest
-          npm ci || (rm package-lock.json && npm install)
+          npm install
           npm run build
 
       - name: Log in to GitHub Container Registry
