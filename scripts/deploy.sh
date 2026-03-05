@@ -27,6 +27,7 @@ info "Logging in to GHCR…"
 echo "${GITHUB_TOKEN}" | docker login ghcr.io -u Reverendheat --password-stdin
 
 info "Pulling latest config from git…"
+git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/Reverendheat/gccr_wholesale_pb.git"
 git pull
 
 info "Pulling latest Docker image…"
