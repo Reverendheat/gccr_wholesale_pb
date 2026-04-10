@@ -10,6 +10,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/reverendheat/gccr_invoice/internal/orders"
 	"github.com/reverendheat/gccr_invoice/internal/square"
+	squaresdk "github.com/square/square-go-sdk/v3"
 )
 
 // Register wires a cron job that fires every 30 minutes and creates any
@@ -18,6 +19,12 @@ func Register(app core.App, sq *square.Client, locationID string) {
 	app.Cron().MustAdd("scheduled_orders", "*/30 * * * *", func() {
 		if err := process(app, sq, locationID); err != nil {
 			log.Printf("scheduled orders cron: %v", err)
+		}
+	})
+
+	app.Cron().MustAdd("reconcile_invoices", "*/15 * * * *", func() {
+		if err := reconcileInvoices(app, sq); err != nil {
+			log.Printf("reconcile invoices cron: %v", err)
 		}
 	})
 }
@@ -114,4 +121,41 @@ func advanceBy(from time.Time, frequency string) time.Time {
 	default:
 		return from.AddDate(0, 0, 7)
 	}
+}
+
+// reconcileInvoices polls Square for invoice status on orders stuck in
+// "invoiced" and updates them to "paid" if the invoice has been paid.
+// This catches payments missed by webhooks (downtime, swallowed errors, etc.).
+func reconcileInvoices(app core.App, sq *square.Client) error {
+	invoiced, err := app.FindRecordsByFilter(
+		"orders",
+		"status = 'invoiced' && square_invoice_id != ''",
+		"+created", 200, 0,
+	)
+	if err != nil {
+		return fmt.Errorf("fetch invoiced orders: %w", err)
+	}
+
+	ctx := context.Background()
+	for _, order := range invoiced {
+		invoiceID := order.GetString("square_invoice_id")
+		inv, err := sq.GetInvoice(ctx, invoiceID)
+		if err != nil {
+			log.Printf("reconcile: order %s: could not fetch invoice %s: %v", order.Id, invoiceID, err)
+			continue
+		}
+		if inv.Status == nil {
+			continue
+		}
+		if *inv.Status == squaresdk.InvoiceStatusPaid {
+			order.Set("status", "paid")
+			if err := app.Save(order); err != nil {
+				log.Printf("reconcile: order %s: could not update status: %v", order.Id, err)
+			} else {
+				log.Printf("reconcile: order %s marked as paid (invoice %s)", order.Id, invoiceID)
+			}
+		}
+	}
+
+	return nil
 }

@@ -68,4 +68,11 @@ button {
 
 button:hover:not(:disabled) {
   background: var(--primary-hover);
+  color: #fff;
+}
+
+/* Don't apply filled-button hover to tab-style buttons */
+.portal-tabs button:hover:not(:disabled),
+.portal-tabs button:focus {
+  background: transparent;
 }

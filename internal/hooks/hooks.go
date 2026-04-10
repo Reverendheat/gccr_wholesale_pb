@@ -6,12 +6,12 @@ import (
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/reverendheat/gccr_invoice/internal/square"
+	squaresdk "github.com/square/square-go-sdk/v3"
 )
 
 // squareCustomerGetter is satisfied by *square.Client and allows test mocking.
 type squareCustomerGetter interface {
-	GetCustomer(ctx context.Context, id string) (*square.Customer, error)
+	GetCustomer(ctx context.Context, id string) (*squaresdk.Customer, error)
 }
 
 // Register wires all application hooks onto app.

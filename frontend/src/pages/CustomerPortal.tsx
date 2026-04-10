@@ -73,6 +73,7 @@ export default function CustomerPortal() {
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
   // Schedule mode state
   const [scheduleMode, setScheduleMode] = useState(false);
@@ -196,6 +197,14 @@ export default function CustomerPortal() {
     const price = c.variation.item_variation_data.price_money?.amount ?? 0;
     return sum + price * c.quantity;
   }, 0);
+
+  // Build a lookup from variation ID → readable name for the orders tab.
+  const variationNames: Record<string, string> = {};
+  for (const item of catalog) {
+    for (const v of item.item_data.variations) {
+      variationNames[v.id] = `${item.item_data.name} — ${v.item_variation_data.name}`;
+    }
+  }
 
   return (
     <div className="portal-shell">
@@ -403,16 +412,50 @@ export default function CustomerPortal() {
                 </thead>
                 <tbody>
                   {orders.map((o) => (
-                    <tr key={o.id}>
-                      <td className="mono">{o.id.slice(0, 8)}</td>
-                      <td>{formatDate(o.created)}</td>
-                      <td>{o.line_items.length} item(s)</td>
-                      <td>
-                        <span className={`status-badge status-${o.status}`}>
-                          {o.status}
-                        </span>
-                      </td>
-                    </tr>
+                    <>
+                      <tr
+                        key={o.id}
+                        className="order-row-clickable"
+                        onClick={() =>
+                          setExpandedOrder(expandedOrder === o.id ? null : o.id)
+                        }
+                      >
+                        <td className="mono">{o.id.slice(0, 8)}</td>
+                        <td>{formatDate(o.created)}</td>
+                        <td>{o.line_items.length} item(s)</td>
+                        <td>
+                          <span className={`status-badge status-${o.status}`}>
+                            {o.status}
+                          </span>
+                        </td>
+                      </tr>
+                      {expandedOrder === o.id && (
+                        <tr key={`${o.id}-detail`} className="order-detail-row">
+                          <td colSpan={4}>
+                            <div className="order-detail">
+                              <ul className="order-detail-items">
+                                {o.line_items.map((li, i) => (
+                                  <li key={i}>
+                                    <span className="order-detail-name">
+                                      {variationNames[li.variation_id] ??
+                                        li.variation_id}
+                                    </span>
+                                    <span className="order-detail-qty">
+                                      × {li.quantity}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {o.notes && (
+                                <p className="order-detail-notes">
+                                  <strong>Notes:</strong> {o.notes}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                 </tbody>
               </table>

@@ -9,6 +9,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/reverendheat/gccr_invoice/internal/square"
+	squaresdk "github.com/square/square-go-sdk/v3"
 )
 
 // LineItem represents a single item in an order.
@@ -31,17 +32,17 @@ func Create(
 	notes, idempotencyKey string,
 ) (*core.Record, error) {
 	lineItemsSnapshot := make([]map[string]any, len(items))
-	squareLineItems := make([]square.OrderLineItem, len(items))
+	squareLineItems := make([]*squaresdk.OrderLineItem, len(items))
 	for i, li := range items {
 		lineItemsSnapshot[i] = map[string]any{
 			"variation_id": li.VariationID,
 			"quantity":     li.Quantity,
 			"note":         li.Note,
 		}
-		squareLineItems[i] = square.OrderLineItem{
-			CatalogObjectID: li.VariationID,
+		squareLineItems[i] = &squaresdk.OrderLineItem{
+			CatalogObjectID: squaresdk.String(li.VariationID),
 			Quantity:        strconv.Itoa(li.Quantity),
-			Note:            li.Note,
+			Note:            squaresdk.String(li.Note),
 		}
 	}
 
@@ -73,7 +74,7 @@ func Create(
 		return nil, fmt.Errorf("create square order: %w", err)
 	}
 
-	pbOrder.Set("square_order_id", squareOrder.ID)
+	pbOrder.Set("square_order_id", *squareOrder.ID)
 	if err := app.Save(pbOrder); err != nil {
 		return nil, fmt.Errorf("update order with square id: %w", err)
 	}

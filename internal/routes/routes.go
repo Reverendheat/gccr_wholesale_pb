@@ -370,7 +370,7 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 			return e.InternalServerError("Could not create Square invoice", err)
 		}
 
-		order.Set("square_invoice_id", invoice.ID)
+		order.Set("square_invoice_id", *invoice.ID)
 		order.Set("status", "invoiced")
 		if err := e.App.Save(order); err != nil {
 			return e.InternalServerError("Could not update order", err)
@@ -383,9 +383,14 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 		}
 		_ = e.App.ExpandRecord(order, []string{"customer"}, nil)
 
+		publicURL := ""
+		if invoice.PublicURL != nil {
+			publicURL = *invoice.PublicURL
+		}
+
 		return e.JSON(http.StatusOK, map[string]any{
 			"order":       order,
-			"invoice_url": invoice.PublicURL,
+			"invoice_url": publicURL,
 		})
 	}
 }
@@ -431,16 +436,33 @@ func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
 			return e.InternalServerError("customers collection not found", err)
 		}
 
-		name := squareCustomer.GivenName + " " + squareCustomer.FamilyName
+		givenName := ""
+		if squareCustomer.GivenName != nil {
+			givenName = *squareCustomer.GivenName
+		}
+		familyName := ""
+		if squareCustomer.FamilyName != nil {
+			familyName = *squareCustomer.FamilyName
+		}
+		name := givenName + " " + familyName
 		if name == " " {
 			name = body.Email
+		}
+
+		phoneNumber := ""
+		if squareCustomer.PhoneNumber != nil {
+			phoneNumber = *squareCustomer.PhoneNumber
+		}
+		squareID := ""
+		if squareCustomer.ID != nil {
+			squareID = *squareCustomer.ID
 		}
 
 		record := core.NewRecord(col)
 		record.SetEmail(body.Email)
 		record.Set("name", name)
-		record.Set("phone", squareCustomer.PhoneNumber)
-		record.Set("square_customer_id", squareCustomer.ID)
+		record.Set("phone", phoneNumber)
+		record.Set("square_customer_id", squareID)
 		// Set a random password — the customer will use the reset link to set their own.
 		record.SetPassword(core.GenerateDefaultRandomId() + core.GenerateDefaultRandomId())
 
