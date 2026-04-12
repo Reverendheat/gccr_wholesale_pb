@@ -34,7 +34,7 @@ function InviteModal({
         name: result.name,
         email: result.email,
         phone: "",
-        square_customer_id: "",
+        squareCustomerId: "",
         created: new Date().toISOString(),
       });
       onClose();
@@ -135,8 +135,8 @@ export default function Customers() {
                 <td>{c.email}</td>
                 <td>{c.phone || "—"}</td>
                 <td className="mono">
-                  {c.square_customer_id
-                    ? c.square_customer_id.slice(0, 12) + "…"
+                  {c.squareCustomerId
+                    ? c.squareCustomerId.slice(0, 12) + "…"
                     : "—"}
                 </td>
                 <td>{formatDate(c.created)}</td>

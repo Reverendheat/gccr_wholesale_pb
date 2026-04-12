@@ -67,7 +67,7 @@ type orderLineItemInput struct {
 }
 
 type createOrderBody struct {
-	LineItems []orderLineItemInput `json:"line_items"`
+	LineItems []orderLineItemInput `json:"lineItems"`
 	Notes     string               `json:"notes"`
 }
 
@@ -112,7 +112,7 @@ func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestE
 			return e.BadRequestError(err.Error(), nil)
 		}
 
-		squareCustomerID := e.Auth.GetString("square_customer_id")
+		squareCustomerID := e.Auth.GetString("squareCustomerId")
 		if squareCustomerID == "" {
 			return e.ForbiddenError("Account is not linked to Square", nil)
 		}
@@ -178,7 +178,7 @@ var validFrequencies = map[string]bool{
 }
 
 type createScheduledOrderBody struct {
-	LineItems []orderLineItemInput `json:"line_items"`
+	LineItems []orderLineItemInput `json:"lineItems"`
 	Notes     string               `json:"notes"`
 	Frequency string               `json:"frequency"`
 }
@@ -200,7 +200,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 			return e.BadRequestError("frequency must be weekly, biweekly, monthly, or quarterly", nil)
 		}
 
-		squareCustomerID := e.Auth.GetString("square_customer_id")
+		squareCustomerID := e.Auth.GetString("squareCustomerId")
 		if squareCustomerID == "" {
 			return e.ForbiddenError("Account is not linked to Square", nil)
 		}
@@ -219,7 +219,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		}
 
 		// Persist the schedule so the cron job can fire subsequent orders.
-		scheduledCol, err := e.App.FindCollectionByNameOrId("scheduled_orders")
+		scheduledCol, err := e.App.FindCollectionByNameOrId("scheduledOrders")
 		if err != nil {
 			return e.InternalServerError("Scheduled orders collection not found", err)
 		}
@@ -238,7 +238,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		sr := core.NewRecord(scheduledCol)
 		sr.Set("customer", e.Auth.Id)
 		sr.Set("frequency", body.Frequency)
-		sr.Set("line_items", lineItemsSnapshot)
+		sr.Set("lineItems", lineItemsSnapshot)
 		sr.Set("notes", body.Notes)
 		sr.Set("next_run_at", nextRunAt.Format("2006-01-02 15:04:05.000Z"))
 		sr.Set("active", true)
@@ -248,14 +248,14 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		}
 
 		// Re-fetch so the response includes server-populated timestamps.
-		sr, err = e.App.FindRecordById("scheduled_orders", sr.Id)
+		sr, err = e.App.FindRecordById("scheduledOrders", sr.Id)
 		if err != nil {
 			return e.InternalServerError("Could not fetch saved scheduled order", err)
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{
 			"order":           firstOrder,
-			"scheduled_order": sr,
+			"scheduledOrder": sr,
 		})
 	}
 }
@@ -272,11 +272,11 @@ func handleListScheduledOrders() func(*core.RequestEvent) error {
 		switch e.Auth.Collection().Name {
 		case "users":
 			records, err = e.App.FindRecordsByFilter(
-				"scheduled_orders", "id != ''", "-id", 200, 0,
+				"scheduledOrders", "id != ''", "-id", 200, 0,
 			)
 		case "customers":
 			records, err = e.App.FindRecordsByFilter(
-				"scheduled_orders",
+				"scheduledOrders",
 				fmt.Sprintf("customer = '%s' && active = true", e.Auth.Id),
 				"-id", 200, 0,
 			)
@@ -288,7 +288,7 @@ func handleListScheduledOrders() func(*core.RequestEvent) error {
 			return e.InternalServerError("Could not fetch scheduled orders", err)
 		}
 
-		return e.JSON(http.StatusOK, map[string]any{"scheduled_orders": records})
+		return e.JSON(http.StatusOK, map[string]any{"scheduledOrders": records})
 	}
 }
 
@@ -299,7 +299,7 @@ func handleCancelScheduledOrder() func(*core.RequestEvent) error {
 		}
 
 		id := e.Request.PathValue("id")
-		sr, err := e.App.FindRecordById("scheduled_orders", id)
+		sr, err := e.App.FindRecordById("scheduledOrders", id)
 		if err != nil {
 			return e.NotFoundError("Scheduled order not found", err)
 		}
@@ -341,11 +341,11 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 			return e.NotFoundError("Order not found", err)
 		}
 
-		squareOrderID := order.GetString("square_order_id")
+		squareOrderID := order.GetString("squareOrderId")
 		if squareOrderID == "" {
 			return e.BadRequestError("Order has no Square order ID", nil)
 		}
-		if order.GetString("square_invoice_id") != "" {
+		if order.GetString("squareInvoiceId") != "" {
 			return e.BadRequestError("Invoice already sent for this order", nil)
 		}
 
@@ -353,7 +353,7 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 		if err != nil {
 			return e.InternalServerError("Could not find customer", err)
 		}
-		squareCustomerID := customerRecord.GetString("square_customer_id")
+		squareCustomerID := customerRecord.GetString("squareCustomerId")
 		if squareCustomerID == "" {
 			return e.BadRequestError("Customer has no Square customer ID", nil)
 		}
@@ -370,7 +370,7 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 			return e.InternalServerError("Could not create Square invoice", err)
 		}
 
-		order.Set("square_invoice_id", *invoice.ID)
+		order.Set("squareInvoiceId", *invoice.ID)
 		order.Set("status", "invoiced")
 		if err := e.App.Save(order); err != nil {
 			return e.InternalServerError("Could not update order", err)
@@ -462,7 +462,7 @@ func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
 		record.SetEmail(body.Email)
 		record.Set("name", name)
 		record.Set("phone", phoneNumber)
-		record.Set("square_customer_id", squareID)
+		record.Set("squareCustomerId", squareID)
 		// Set a random password — the customer will use the reset link to set their own.
 		record.SetPassword(core.GenerateDefaultRandomId() + core.GenerateDefaultRandomId())
 

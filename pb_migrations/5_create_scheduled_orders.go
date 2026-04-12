@@ -15,7 +15,7 @@ func init() {
 			return fmt.Errorf("could not find customers collection: %w", err)
 		}
 
-		collection := core.NewBaseCollection("scheduled_orders")
+		collection := core.NewBaseCollection("scheduledOrders")
 
 		collection.ListRule = types.Pointer(
 			`customer.id = @request.auth.id || @request.auth.collectionName = "users"`,
@@ -41,7 +41,7 @@ func init() {
 			},
 			// JSON snapshot of line items: [{variation_id, quantity, note}]
 			&core.JSONField{
-				Name:     "line_items",
+				Name:     "lineItems",
 				Required: true,
 			},
 			&core.TextField{
@@ -60,12 +60,12 @@ func init() {
 			},
 		)
 
-		collection.AddIndex("idx_scheduled_orders_customer", false, "customer", "")
-		collection.AddIndex("idx_scheduled_orders_next_run", false, "next_run_at", "")
+		collection.AddIndex("idx_scheduledOrders_customer", false, "customer", "")
+		collection.AddIndex("idx_scheduledOrders_next_run", false, "next_run_at", "")
 
 		return app.Save(collection)
 	}, func(app core.App) error {
-		collection, err := app.FindCollectionByNameOrId("scheduled_orders")
+		collection, err := app.FindCollectionByNameOrId("scheduledOrders")
 		if err != nil {
 			return err
 		}

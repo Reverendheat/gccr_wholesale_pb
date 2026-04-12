@@ -22,7 +22,7 @@ func TestValidateSquareCustomer_EmptyID(t *testing.T) {
 	sq := &mockSquare{customer: &squaresdk.Customer{ID: squaresdk.String("X")}}
 	err := validateSquareCustomer(context.Background(), sq, "")
 	if err == nil {
-		t.Fatal("expected error for empty square_customer_id")
+		t.Fatal("expected error for empty squareCustomerId")
 	}
 }
 

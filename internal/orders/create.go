@@ -55,7 +55,7 @@ func Create(
 	pbOrder.Set("customer", customerID)
 	pbOrder.Set("status", "pending")
 	pbOrder.Set("notes", notes)
-	pbOrder.Set("line_items", lineItemsSnapshot)
+	pbOrder.Set("lineItems", lineItemsSnapshot)
 
 	if err := app.Save(pbOrder); err != nil {
 		return nil, fmt.Errorf("save order: %w", err)
@@ -74,7 +74,7 @@ func Create(
 		return nil, fmt.Errorf("create square order: %w", err)
 	}
 
-	pbOrder.Set("square_order_id", *squareOrder.ID)
+	pbOrder.Set("squareOrderId", *squareOrder.ID)
 	if err := app.Save(pbOrder); err != nil {
 		return nil, fmt.Errorf("update order with square id: %w", err)
 	}

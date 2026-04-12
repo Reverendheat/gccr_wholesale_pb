@@ -40,14 +40,14 @@ func addTimestampFields(app core.App, collectionName string) error {
 
 func init() {
 	m.Register(func(app core.App) error {
-		for _, name := range []string{"customers", "orders", "scheduled_orders"} {
+		for _, name := range []string{"customers", "orders", "scheduledOrders"} {
 			if err := addTimestampFields(app, name); err != nil {
 				return err
 			}
 		}
 		return nil
 	}, func(app core.App) error {
-		for _, name := range []string{"customers", "orders", "scheduled_orders"} {
+		for _, name := range []string{"customers", "orders", "scheduledOrders"} {
 			col, err := app.FindCollectionByNameOrId(name)
 			if err != nil {
 				return err

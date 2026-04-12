@@ -12,7 +12,7 @@ export interface CustomerRecord {
   name: string;
   email: string;
   phone: string;
-  square_customer_id: string;
+  squareCustomerId: string;
   created: string;
 }
 
@@ -86,9 +86,9 @@ export interface Order {
   customer: string;
   status: string;
   notes: string;
-  line_items: LineItemInput[];
-  square_order_id: string;
-  square_invoice_id: string;
+  lineItems: LineItemInput[];
+  squareOrderId: string;
+  squareInvoiceId: string;
   created: string;
   expand?: {
     customer?: {
@@ -113,7 +113,7 @@ export interface ScheduledOrder {
   id: string;
   customer: string;
   frequency: ScheduleFrequency;
-  line_items: LineItemInput[];
+  lineItems: LineItemInput[];
   notes: string;
   next_run_at: string;
   active: boolean;
@@ -134,7 +134,7 @@ export async function submitOrder(
   const res = await fetch(`${BASE}/orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ line_items: lineItems, notes }),
+    body: JSON.stringify({ lineItems: lineItems, notes }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -154,11 +154,11 @@ export async function submitScheduledOrder(
   lineItems: LineItemInput[],
   notes: string,
   frequency: ScheduleFrequency,
-): Promise<{ order: Order; scheduled_order: ScheduledOrder }> {
+): Promise<{ order: Order; scheduledOrder: ScheduledOrder }> {
   const res = await fetch(`${BASE}/scheduled-orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ line_items: lineItems, notes, frequency }),
+    body: JSON.stringify({ lineItems: lineItems, notes, frequency }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -171,7 +171,7 @@ export async function fetchScheduledOrders(): Promise<ScheduledOrder[]> {
   const res = await fetch(`${BASE}/scheduled-orders`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Scheduled orders fetch failed: ${res.status}`);
   const data = await res.json();
-  return data.scheduled_orders ?? [];
+  return data.scheduledOrders ?? [];
 }
 
 export async function cancelScheduledOrder(id: string): Promise<void> {

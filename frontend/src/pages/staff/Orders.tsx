@@ -65,8 +65,8 @@ function OrderDrawer({
   }
 
   const canSendInvoice =
-    order.square_order_id &&
-    !order.square_invoice_id &&
+    order.squareOrderId &&
+    !order.squareInvoiceId &&
     status !== "paid" &&
     status !== "cancelled";
 
@@ -112,10 +112,10 @@ function OrderDrawer({
                   )}
                 </span>
               </div>
-              {order.square_order_id && (
+              {order.squareOrderId && (
                 <div className="meta-row">
                   <span className="meta-label">Square Order</span>
-                  <span className="mono">{order.square_order_id}</span>
+                  <span className="mono">{order.squareOrderId}</span>
                 </div>
               )}
               <div className="meta-row">
@@ -154,7 +154,7 @@ function OrderDrawer({
                 </tr>
               </thead>
               <tbody>
-                {order.line_items.map((li, i) => (
+                {order.lineItems.map((li, i) => (
                   <tr key={i}>
                     <td className="mono">{li.variation_id}</td>
                     <td>{li.quantity}</td>
@@ -176,10 +176,10 @@ function OrderDrawer({
           {/* Invoice */}
           <section className="drawer-section">
             <h4 className="drawer-section-title">Invoice</h4>
-            {order.square_invoice_id ? (
+            {order.squareInvoiceId ? (
               <div className="invoice-sent">
                 <span className="invoice-sent-label">Invoice sent</span>
-                <span className="mono invoice-id">{order.square_invoice_id}</span>
+                <span className="mono invoice-id">{order.squareInvoiceId}</span>
                 {invoiceURL && (
                   <a href={invoiceURL} target="_blank" rel="noopener noreferrer" className="invoice-link">
                     View invoice ↗
@@ -281,10 +281,10 @@ export default function Orders() {
                       <span className="mono">{o.customer.slice(0, 8)}</span>
                     )}
                   </td>
-                  <td>{o.line_items.length} item(s)</td>
+                  <td>{o.lineItems.length} item(s)</td>
                   <td className="mono">
-                    {o.square_order_id
-                      ? o.square_order_id.slice(0, 10) + "…"
+                    {o.squareOrderId
+                      ? o.squareOrderId.slice(0, 10) + "…"
                       : "—"}
                   </td>
                   <td>

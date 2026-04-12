@@ -86,11 +86,11 @@ func handleInvoicePaymentMade(e *core.RequestEvent, squareInvoiceID string) erro
 
 	records, err := e.App.FindRecordsByFilter(
 		"orders",
-		fmt.Sprintf("square_invoice_id = '%s'", squareInvoiceID),
+		fmt.Sprintf("squareInvoiceId = '%s'", squareInvoiceID),
 		"", 1, 0,
 	)
 	if err != nil || len(records) == 0 {
-		return fmt.Errorf("order not found for square_invoice_id %s", squareInvoiceID)
+		return fmt.Errorf("order not found for squareInvoiceId %s", squareInvoiceID)
 	}
 
 	order := records[0]

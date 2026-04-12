@@ -15,7 +15,7 @@ export default function Invoices() {
   useEffect(() => {
     fetchStaffOrders()
       .then((orders) =>
-        setInvoiced(orders.filter((o) => o.square_invoice_id))
+        setInvoiced(orders.filter((o) => o.squareInvoiceId))
       )
       .catch((e: unknown) =>
         setError(e instanceof Error ? e.message : "Failed to load invoices")
@@ -45,7 +45,7 @@ export default function Invoices() {
           <tbody>
             {invoiced.map((o) => (
               <tr key={o.id}>
-                <td className="mono">{o.square_invoice_id}</td>
+                <td className="mono">{o.squareInvoiceId}</td>
                 <td className="mono">{o.id.slice(0, 8)}</td>
                 <td>{formatDate(o.created)}</td>
                 <td>{o.expand?.customer?.name ?? <span className="mono">{o.customer.slice(0, 8)}</span>}</td>

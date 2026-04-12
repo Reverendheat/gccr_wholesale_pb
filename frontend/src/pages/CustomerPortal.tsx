@@ -156,13 +156,13 @@ export default function CustomerPortal() {
     setSubmitting(true);
     setError(null);
     try {
-      const { order, scheduled_order } = await submitScheduledOrder(
+      const { order, scheduledOrder } = await submitScheduledOrder(
         lineItemsFromCart(),
         notes,
         frequency,
       );
       setOrders((prev) => [order, ...prev]);
-      setScheduledOrders((prev) => [scheduled_order, ...prev]);
+      setScheduledOrders((prev) => [scheduledOrder, ...prev]);
       setCart([]);
       setNotes("");
       setScheduleMode(false);
@@ -422,7 +422,7 @@ export default function CustomerPortal() {
                       >
                         <td className="mono">{o.id.slice(0, 8)}</td>
                         <td>{formatDate(o.created)}</td>
-                        <td>{o.line_items.length} item(s)</td>
+                        <td>{o.lineItems.length} item(s)</td>
                         <td>
                           <span className={`status-badge status-${o.status}`}>
                             {o.status}
@@ -434,7 +434,7 @@ export default function CustomerPortal() {
                           <td colSpan={4}>
                             <div className="order-detail">
                               <ul className="order-detail-items">
-                                {o.line_items.map((li, i) => (
+                                {o.lineItems.map((li, i) => (
                                   <li key={i}>
                                     <span className="order-detail-name">
                                       {variationNames[li.variation_id] ??
@@ -498,7 +498,7 @@ export default function CustomerPortal() {
                     <tr key={s.id}>
                       <td className="mono">{s.id.slice(0, 8)}</td>
                       <td>{formatDate(s.created)}</td>
-                      <td>{s.line_items.length} item(s)</td>
+                      <td>{s.lineItems.length} item(s)</td>
                       <td>
                         <span className="frequency-badge">
                           {FREQUENCY_LABELS[s.frequency]}

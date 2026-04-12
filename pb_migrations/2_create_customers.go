@@ -30,13 +30,13 @@ func init() {
 				Max:      30,
 			},
 			&core.TextField{
-				Name:     "square_customer_id",
+				Name:     "squareCustomerId",
 				Required: true,
 				Max:      100,
 			},
 		)
 
-		collection.AddIndex("idx_customers_square_id", true, "square_customer_id", "")
+		collection.AddIndex("idx_customers_square_id", true, "squareCustomerId", "")
 
 		return app.Save(collection)
 	}, func(app core.App) error {

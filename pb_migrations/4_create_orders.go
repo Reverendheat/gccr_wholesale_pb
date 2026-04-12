@@ -50,16 +50,16 @@ func init() {
 			},
 			// JSON snapshot of line items at time of order: [{variation_id, name, quantity, unit_price_cents}]
 			&core.JSONField{
-				Name:     "line_items",
+				Name:     "lineItems",
 				Required: true,
 			},
 			&core.TextField{
-				Name:     "square_order_id",
+				Name:     "squareOrderId",
 				Required: false,
 				Max:      100,
 			},
 			&core.TextField{
-				Name:     "square_invoice_id",
+				Name:     "squareInvoiceId",
 				Required: false,
 				Max:      100,
 			},

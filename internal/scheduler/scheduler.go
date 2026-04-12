@@ -16,7 +16,7 @@ import (
 // Register wires a cron job that fires every 30 minutes and creates any
 // scheduled orders that are due.
 func Register(app core.App, sq *square.Client, locationID string) {
-	app.Cron().MustAdd("scheduled_orders", "*/30 * * * *", func() {
+	app.Cron().MustAdd("scheduledOrders", "*/30 * * * *", func() {
 		if err := process(app, sq, locationID); err != nil {
 			log.Printf("scheduled orders cron: %v", err)
 		}
@@ -33,7 +33,7 @@ func Register(app core.App, sq *square.Client, locationID string) {
 // (or now), creates an order for each, and advances next_run_at.
 func process(app core.App, sq *square.Client, locationID string) error {
 	due, err := app.FindRecordsByFilter(
-		"scheduled_orders",
+		"scheduledOrders",
 		"active = true && next_run_at <= @now",
 		"+next_run_at", 500, 0,
 	)
@@ -49,7 +49,7 @@ func process(app core.App, sq *square.Client, locationID string) error {
 	return nil
 }
 
-// processOne creates a single order for one scheduled_orders record and
+// processOne creates a single order for one scheduledOrders record and
 // advances its next_run_at timestamp.
 func processOne(app core.App, sq *square.Client, locationID string, sr *core.Record) error {
 	ctx := context.Background()
@@ -59,14 +59,14 @@ func processOne(app core.App, sq *square.Client, locationID string, sr *core.Rec
 		return fmt.Errorf("find customer: %w", err)
 	}
 
-	squareCustomerID := customerRecord.GetString("square_customer_id")
+	squareCustomerID := customerRecord.GetString("squareCustomerId")
 	if squareCustomerID == "" {
-		return fmt.Errorf("customer %s has no square_customer_id", customerRecord.Id)
+		return fmt.Errorf("customer %s has no squareCustomerId", customerRecord.Id)
 	}
 
 	var lineItemsRaw []map[string]any
-	if err := sr.UnmarshalJSONField("line_items", &lineItemsRaw); err != nil {
-		return fmt.Errorf("unmarshal line_items: %w", err)
+	if err := sr.UnmarshalJSONField("lineItems", &lineItemsRaw); err != nil {
+		return fmt.Errorf("unmarshal lineItems: %w", err)
 	}
 
 	items := make([]orders.LineItem, 0, len(lineItemsRaw))
@@ -129,7 +129,7 @@ func advanceBy(from time.Time, frequency string) time.Time {
 func reconcileInvoices(app core.App, sq *square.Client) error {
 	invoiced, err := app.FindRecordsByFilter(
 		"orders",
-		"status = 'invoiced' && square_invoice_id != ''",
+		"status = 'invoiced' && squareInvoiceId != ''",
 		"+created", 200, 0,
 	)
 	if err != nil {
@@ -138,7 +138,7 @@ func reconcileInvoices(app core.App, sq *square.Client) error {
 
 	ctx := context.Background()
 	for _, order := range invoiced {
-		invoiceID := order.GetString("square_invoice_id")
+		invoiceID := order.GetString("squareInvoiceId")
 		inv, err := sq.GetInvoice(ctx, invoiceID)
 		if err != nil {
 			log.Printf("reconcile: order %s: could not fetch invoice %s: %v", order.Id, invoiceID, err)
