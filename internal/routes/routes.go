@@ -3,13 +3,16 @@ package routes
 
 import (
 	"fmt"
+	"html"
 	"net/http"
+	"net/mail"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/mails"
+	"github.com/pocketbase/pocketbase/tools/mailer"
 	"github.com/reverendheat/gccr_invoice/internal/orders"
 	"github.com/reverendheat/gccr_invoice/internal/square"
 )
@@ -40,7 +43,7 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string) {
 	// POST /api/wholesale/invoices — staff sends a Square invoice for an order
 	g.POST("/invoices", handleSendInvoice(sq, locationID))
 
-	// POST /api/wholesale/invite — staff invites a customer by email (looks up Square, creates account, emails reset link)
+	// POST /api/wholesale/invite — staff invites a customer by email (looks up Square, creates account, emails welcome link)
 	g.POST("/invite", handleInviteCustomer(sq))
 
 	// Square webhook — must be outside the auth group; Square sends no auth token.
@@ -254,7 +257,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{
-			"order":           firstOrder,
+			"order":          firstOrder,
 			"scheduledOrder": sr,
 		})
 	}
@@ -463,17 +466,16 @@ func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
 		record.Set("name", name)
 		record.Set("phone", phoneNumber)
 		record.Set("squareCustomerId", squareID)
-		// Set a random password — the customer will use the reset link to set their own.
+		// Set a random password even though customer password auth is disabled.
 		record.SetPassword(core.GenerateDefaultRandomId() + core.GenerateDefaultRandomId())
 
 		if err := e.App.Save(record); err != nil {
 			return e.InternalServerError("Could not create customer account", err)
 		}
 
-		// Send the password reset email so the customer can set their own password.
-		if err := mails.SendRecordPasswordReset(e.App, record); err != nil {
-			// Account was created; log but don't fail — staff can resend from PB admin.
-			e.App.Logger().Error("invite: failed to send password reset email",
+		if err := sendCustomerWelcomeEmail(e.App, record); err != nil {
+			// Account was created; log but don't fail.
+			e.App.Logger().Error("invite: failed to send welcome email",
 				"customer_id", record.Id, "email", body.Email, "error", err)
 		}
 
@@ -483,6 +485,36 @@ func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
 			"name":  name,
 		})
 	}
+}
+
+func sendCustomerWelcomeEmail(app core.App, record *core.Record) error {
+	settings := app.Settings()
+	appURL := strings.TrimRight(settings.Meta.AppURL, "/")
+	customerName := strings.TrimSpace(record.GetString("name"))
+	if customerName == "" {
+		customerName = record.Email()
+	}
+
+	escapedName := html.EscapeString(customerName)
+	escapedURL := html.EscapeString(appURL)
+
+	message := &mailer.Message{
+		From: mail.Address{
+			Name:    settings.Meta.SenderName,
+			Address: settings.Meta.SenderAddress,
+		},
+		To:      []mail.Address{{Address: record.Email()}},
+		Subject: "Welcome to GCCR Wholesale",
+		HTML: fmt.Sprintf(
+			`<p>Hi %s,</p>
+<p>Your GCCR Wholesale account has been created.</p>
+<p><a href="%s">Open GCCR Wholesale</a>, choose Customer, and request a one-time sign-in code with this email address.</p>`,
+			escapedName,
+			escapedURL,
+		),
+	}
+
+	return app.NewMailClient().Send(message)
 }
 
 // advanceBy returns the timestamp for the next run based on frequency.
