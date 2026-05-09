@@ -2,6 +2,9 @@ pb_data/
 **/node_modules
 .env
 .env.production
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 *.db
 *.db-shm
 *.db-wal
