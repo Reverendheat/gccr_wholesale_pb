@@ -75,6 +75,13 @@
   gap: 1rem;
 }
 
+.login-help {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
 .login-error {
   color: var(--error);
   font-size: 0.85rem;
@@ -89,4 +96,16 @@
 .login-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.login-link {
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  font-size: 0.9rem;
+}
+
+.login-link:hover {
+  text-decoration: underline;
 }

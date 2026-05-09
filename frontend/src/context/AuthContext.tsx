@@ -11,8 +11,10 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  loginAsStaff: (email: string, password: string) => Promise<void>;
-  loginAsCustomer: (email: string, password: string) => Promise<void>;
+  requestStaffOTP: (email: string) => Promise<string>;
+  requestCustomerOTP: (email: string) => Promise<string>;
+  loginAsStaff: (otpId: string, code: string) => Promise<void>;
+  loginAsCustomer: (otpId: string, code: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -47,13 +49,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsub;
   }, []);
 
-  async function loginAsStaff(email: string, password: string) {
-    await pb.collection("users").authWithPassword(email, password);
+  async function requestStaffOTP(email: string): Promise<string> {
+    const result = await pb.collection("users").requestOTP(email);
+    return result.otpId;
+  }
+
+  async function requestCustomerOTP(email: string): Promise<string> {
+    const result = await pb.collection("customers").requestOTP(email);
+    return result.otpId;
+  }
+
+  async function loginAsStaff(otpId: string, code: string) {
+    await pb.collection("users").authWithOTP(otpId, code);
     setState({ user: pb.authStore.record, role: "staff", isLoading: false });
   }
 
-  async function loginAsCustomer(email: string, password: string) {
-    await pb.collection("customers").authWithPassword(email, password);
+  async function loginAsCustomer(otpId: string, code: string) {
+    await pb.collection("customers").authWithOTP(otpId, code);
     setState({ user: pb.authStore.record, role: "customer", isLoading: false });
   }
 
@@ -63,7 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, loginAsStaff, loginAsCustomer, logout }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        requestStaffOTP,
+        requestCustomerOTP,
+        loginAsStaff,
+        loginAsCustomer,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
