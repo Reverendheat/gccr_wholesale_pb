@@ -137,6 +137,7 @@ done
 
 info "Creating PocketBase superuser…"
 docker compose exec -T app ./server superuser upsert "$ADMIN_EMAIL" "$ADMIN_PASSWORD" \
+  --dir /app/pb_data \
   && ok "Superuser created: $ADMIN_EMAIL" \
   || ok "Superuser already exists (upsert skipped)"
 

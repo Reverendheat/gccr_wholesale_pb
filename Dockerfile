@@ -28,4 +28,4 @@ EXPOSE 8090
 
 VOLUME ["/app/pb_data"]
 
-CMD ["./server", "serve", "--http", "0.0.0.0:8090"]
+CMD ["./server", "serve", "--http", "0.0.0.0:8090", "--dir", "/app/pb_data"]
