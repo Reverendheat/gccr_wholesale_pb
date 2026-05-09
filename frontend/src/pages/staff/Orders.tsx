@@ -31,7 +31,6 @@ function OrderDrawer({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [invoicing, setInvoicing] = useState(false);
-  const [invoiceURL, setInvoiceURL] = useState<string | null>(null);
   const customer = order.expand?.customer;
 
   async function handleStatusChange(newStatus: string) {
@@ -54,7 +53,6 @@ function OrderDrawer({
     try {
       const result = await sendInvoice(order.id);
       setStatus("invoiced");
-      setInvoiceURL(result.invoice_url);
       onStatusChange(order.id, "invoiced");
       onOrderUpdate(result.order);
     } catch (e: unknown) {
@@ -180,8 +178,13 @@ function OrderDrawer({
               <div className="invoice-sent">
                 <span className="invoice-sent-label">Invoice sent</span>
                 <span className="mono invoice-id">{order.squareInvoiceId}</span>
-                {invoiceURL && (
-                  <a href={invoiceURL} target="_blank" rel="noopener noreferrer" className="invoice-link">
+                {order.squareInvoiceUrl && (
+                  <a
+                    href={order.squareInvoiceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="invoice-link"
+                  >
                     View invoice ↗
                   </a>
                 )}

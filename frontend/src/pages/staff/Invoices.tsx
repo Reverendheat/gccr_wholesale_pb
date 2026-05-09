@@ -40,6 +40,7 @@ export default function Invoices() {
               <th>Date</th>
               <th>Customer</th>
               <th>Status</th>
+              <th>Invoice</th>
             </tr>
           </thead>
           <tbody>
@@ -53,6 +54,20 @@ export default function Invoices() {
                   <span className={`status-badge status-${o.status}`}>
                     {o.status}
                   </span>
+                </td>
+                <td>
+                  {o.squareInvoiceUrl ? (
+                    <a
+                      href={o.squareInvoiceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="invoice-link"
+                    >
+                      View invoice
+                    </a>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
                 </td>
               </tr>
             ))}

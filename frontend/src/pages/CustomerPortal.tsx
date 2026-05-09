@@ -408,6 +408,7 @@ export default function CustomerPortal() {
                     <th>Date</th>
                     <th>Items</th>
                     <th>Status</th>
+                    <th>Invoice</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -428,10 +429,25 @@ export default function CustomerPortal() {
                             {o.status}
                           </span>
                         </td>
+                        <td>
+                          {o.squareInvoiceUrl ? (
+                            <a
+                              className="invoice-link"
+                              href={o.squareInvoiceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              View invoice
+                            </a>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
                       </tr>
                       {expandedOrder === o.id && (
                         <tr key={`${o.id}-detail`} className="order-detail-row">
-                          <td colSpan={4}>
+                          <td colSpan={5}>
                             <div className="order-detail">
                               <ul className="order-detail-items">
                                 {o.lineItems.map((li, i) => (

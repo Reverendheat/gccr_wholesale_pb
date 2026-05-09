@@ -89,6 +89,7 @@ export interface Order {
   lineItems: LineItemInput[];
   squareOrderId: string;
   squareInvoiceId: string;
+  squareInvoiceUrl: string;
   created: string;
   expand?: {
     customer?: {

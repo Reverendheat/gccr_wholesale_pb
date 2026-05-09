@@ -124,6 +124,8 @@
 }
 .orders-table th { font-weight: 600; color: var(--text-muted); background: var(--surface); }
 .mono { font-family: monospace; }
+.invoice-link { color: var(--primary); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.invoice-link:hover { color: var(--primary-hover); text-decoration: underline; }
 
 /* Expandable order rows */
 .order-row-clickable { cursor: pointer; transition: background 0.1s; }

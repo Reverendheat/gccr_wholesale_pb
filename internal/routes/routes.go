@@ -373,7 +373,13 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 			return e.InternalServerError("Could not create Square invoice", err)
 		}
 
+		publicURL := ""
+		if invoice.PublicURL != nil {
+			publicURL = *invoice.PublicURL
+		}
+
 		order.Set("squareInvoiceId", *invoice.ID)
+		order.Set("squareInvoiceUrl", publicURL)
 		order.Set("status", "invoiced")
 		if err := e.App.Save(order); err != nil {
 			return e.InternalServerError("Could not update order", err)
@@ -385,11 +391,6 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 			return e.InternalServerError("Could not refresh order", err)
 		}
 		_ = e.App.ExpandRecord(order, []string{"customer"}, nil)
-
-		publicURL := ""
-		if invoice.PublicURL != nil {
-			publicURL = *invoice.PublicURL
-		}
 
 		return e.JSON(http.StatusOK, map[string]any{
 			"order":       order,
