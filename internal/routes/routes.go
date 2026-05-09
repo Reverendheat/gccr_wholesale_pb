@@ -2,6 +2,8 @@
 package routes
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -10,11 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/mailer"
 	"github.com/reverendheat/gccr_invoice/internal/orders"
 	"github.com/reverendheat/gccr_invoice/internal/square"
+	squaresdk "github.com/square/square-go-sdk/v3"
 )
 
 // Register binds all custom application routes onto the serve event.
@@ -460,12 +464,19 @@ func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
 		if squareCustomer.ID != nil {
 			squareID = *squareCustomer.ID
 		}
+		companyID, companyName, err := findOrCreateCompanyForSquareCustomer(e.App, squareCustomer)
+		if err != nil {
+			return e.InternalServerError("Could not associate customer company", err)
+		}
 
 		record := core.NewRecord(col)
 		record.SetEmail(body.Email)
 		record.Set("name", name)
 		record.Set("phone", phoneNumber)
 		record.Set("squareCustomerId", squareID)
+		if companyID != "" {
+			record.Set("company", companyID)
+		}
 		// Set a random password even though customer password auth is disabled.
 		record.SetPassword(core.GenerateDefaultRandomId() + core.GenerateDefaultRandomId())
 
@@ -480,11 +491,122 @@ func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{
-			"id":    record.Id,
-			"email": body.Email,
-			"name":  name,
+			"id":          record.Id,
+			"email":       body.Email,
+			"name":        name,
+			"company":     companyID,
+			"companyName": companyName,
 		})
 	}
+}
+
+func findOrCreateCompanyForSquareCustomer(app core.App, customer *squaresdk.Customer) (string, string, error) {
+	companyName := ""
+	if customer != nil && customer.CompanyName != nil {
+		companyName = strings.TrimSpace(*customer.CompanyName)
+	}
+	if companyName == "" {
+		return "", "", nil
+	}
+
+	existing, err := app.FindFirstRecordByFilter(
+		"companies",
+		"name={:name}",
+		dbx.Params{"name": companyName},
+	)
+	if err == nil {
+		if err := fillCompanyDetails(app, existing, customer); err != nil {
+			return "", "", err
+		}
+		return existing.Id, companyName, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", "", err
+	}
+
+	collection, err := app.FindCollectionByNameOrId("companies")
+	if err != nil {
+		return "", "", err
+	}
+
+	record := core.NewRecord(collection)
+	record.Set("name", companyName)
+	setCompanyDetails(record, customer)
+
+	if err := app.Save(record); err != nil {
+		return "", "", err
+	}
+
+	return record.Id, companyName, nil
+}
+
+func fillCompanyDetails(app core.App, record *core.Record, customer *squaresdk.Customer) error {
+	if customer == nil {
+		return nil
+	}
+
+	changed := false
+
+	setIfEmpty := func(field string, value string) {
+		value = strings.TrimSpace(value)
+		if value != "" && record.GetString(field) == "" {
+			record.Set(field, value)
+			changed = true
+		}
+	}
+
+	setIfEmpty("address", formatSquareAddress(customer.Address))
+	if customer.PhoneNumber != nil {
+		setIfEmpty("phone", *customer.PhoneNumber)
+	}
+	if customer.EmailAddress != nil {
+		setIfEmpty("email", *customer.EmailAddress)
+	}
+
+	if !changed {
+		return nil
+	}
+
+	return app.Save(record)
+}
+
+func setCompanyDetails(record *core.Record, customer *squaresdk.Customer) {
+	if customer == nil {
+		return
+	}
+
+	record.Set("address", formatSquareAddress(customer.Address))
+	if customer.PhoneNumber != nil {
+		record.Set("phone", *customer.PhoneNumber)
+	}
+	if customer.EmailAddress != nil {
+		record.Set("email", *customer.EmailAddress)
+	}
+}
+
+func formatSquareAddress(address *squaresdk.Address) string {
+	if address == nil {
+		return ""
+	}
+
+	parts := []string{}
+	add := func(value *string) {
+		if value != nil && strings.TrimSpace(*value) != "" {
+			parts = append(parts, strings.TrimSpace(*value))
+		}
+	}
+
+	add(address.AddressLine1)
+	add(address.AddressLine2)
+	add(address.AddressLine3)
+	add(address.Locality)
+	add(address.AdministrativeDistrictLevel1)
+	add(address.PostalCode)
+	if address.Country != nil {
+		parts = append(parts, fmt.Sprint(*address.Country))
+	}
+
+	return strings.Join(parts, ", ")
 }
 
 func sendCustomerWelcomeEmail(app core.App, record *core.Record) error {

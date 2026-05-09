@@ -35,6 +35,10 @@ function InviteModal({
         email: result.email,
         phone: "",
         squareCustomerId: "",
+        company: result.company,
+        expand: result.companyName
+          ? { company: { id: result.company, name: result.companyName } }
+          : undefined,
         created: new Date().toISOString(),
       });
       onClose();
@@ -122,6 +126,7 @@ export default function Customers() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Company</th>
               <th>Email</th>
               <th>Phone</th>
               <th>Square ID</th>
@@ -132,6 +137,7 @@ export default function Customers() {
             {customers.map((c) => (
               <tr key={c.id}>
                 <td>{c.name || "—"}</td>
+                <td>{c.expand?.company?.name || "—"}</td>
                 <td>{c.email}</td>
                 <td>{c.phone || "—"}</td>
                 <td className="mono">

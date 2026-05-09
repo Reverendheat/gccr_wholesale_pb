@@ -13,12 +13,20 @@ export interface CustomerRecord {
   email: string;
   phone: string;
   squareCustomerId: string;
+  company?: string;
   created: string;
+  expand?: {
+    company?: {
+      id: string;
+      name: string;
+    };
+  };
 }
 
 export async function fetchCustomers(): Promise<CustomerRecord[]> {
   return pb.collection("customers").getFullList<CustomerRecord>({
     sort: "name",
+    expand: "company",
     requestKey: null, // disable auto-cancellation so StrictMode double-mount doesn't abort the request
   });
 }
@@ -186,6 +194,8 @@ export interface InviteResult {
   id: string;
   email: string;
   name: string;
+  company: string;
+  companyName: string;
 }
 
 export async function inviteCustomer(email: string): Promise<InviteResult> {
