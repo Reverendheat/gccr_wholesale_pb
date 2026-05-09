@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/reverendheat/gccr_invoice/pb_migrations"
 
+	"github.com/reverendheat/gccr_invoice/internal/config"
 	"github.com/reverendheat/gccr_invoice/internal/hooks"
 	"github.com/reverendheat/gccr_invoice/internal/routes"
 	"github.com/reverendheat/gccr_invoice/internal/scheduler"
@@ -19,6 +20,13 @@ import (
 
 func main() {
 	app := pocketbase.New()
+
+	app.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
+		if err := e.Next(); err != nil {
+			return err
+		}
+		return config.ApplySettingsFromEnv(app)
+	})
 
 	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 		Automigrate: true,
