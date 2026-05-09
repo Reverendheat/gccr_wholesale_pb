@@ -123,13 +123,13 @@ func advanceBy(from time.Time, frequency string) time.Time {
 	}
 }
 
-// reconcileInvoices polls Square for invoice status on orders stuck in
-// "invoiced" and updates them to "paid" if the invoice has been paid.
-// This catches payments missed by webhooks (downtime, swallowed errors, etc.).
+// reconcileInvoices polls Square for invoice status and public URLs on orders
+// with Square invoices. This catches payments missed by webhooks and backfills
+// invoice URLs for records created before the URL field existed.
 func reconcileInvoices(app core.App, sq *square.Client) error {
 	invoiced, err := app.FindRecordsByFilter(
 		"orders",
-		"status = 'invoiced' && squareInvoiceId != ''",
+		"(status = 'invoiced' || status = 'paid') && squareInvoiceId != ''",
 		"+created", 200, 0,
 	)
 	if err != nil {
@@ -144,15 +144,23 @@ func reconcileInvoices(app core.App, sq *square.Client) error {
 			log.Printf("reconcile: order %s: could not fetch invoice %s: %v", order.Id, invoiceID, err)
 			continue
 		}
-		if inv.Status == nil {
-			continue
+
+		changed := false
+		if order.GetString("squareInvoiceUrl") == "" && inv.PublicURL != nil {
+			order.Set("squareInvoiceUrl", *inv.PublicURL)
+			changed = true
 		}
-		if *inv.Status == squaresdk.InvoiceStatusPaid {
+
+		if inv.Status != nil && *inv.Status == squaresdk.InvoiceStatusPaid && order.GetString("status") != "paid" {
 			order.Set("status", "paid")
+			changed = true
+		}
+
+		if changed {
 			if err := app.Save(order); err != nil {
-				log.Printf("reconcile: order %s: could not update status: %v", order.Id, err)
+				log.Printf("reconcile: order %s: could not update invoice state: %v", order.Id, err)
 			} else {
-				log.Printf("reconcile: order %s marked as paid (invoice %s)", order.Id, invoiceID)
+				log.Printf("reconcile: order %s updated from invoice %s", order.Id, invoiceID)
 			}
 		}
 	}

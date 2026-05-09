@@ -165,6 +165,10 @@ func handleListOrders() func(*core.RequestEvent) error {
 		// Expand the customer relation so the frontend can show customer names.
 		for _, rec := range records {
 			_ = e.App.ExpandRecord(rec, []string{"customer"}, nil)
+			if e.Auth.Collection().Name == "customers" {
+				rec.Set("squareOrderId", "")
+				rec.Set("squareInvoiceId", "")
+			}
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{"orders": records})
