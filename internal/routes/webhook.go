@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/reverendheat/gccr_invoice/internal/orders/fsm"
 )
 
 // squareWebhookEvent is the envelope Square sends for all event types.
@@ -94,7 +95,11 @@ func handleInvoicePaymentMade(e *core.RequestEvent, squareInvoiceID string) erro
 	}
 
 	order := records[0]
-	order.Set("status", "paid")
+	next, err := fsm.Apply(fsm.Status(order.GetString("status")), fsm.EventSquareInvoicePaid)
+	if err != nil {
+		return fmt.Errorf("apply paid event: %w", err)
+	}
+	order.Set("status", string(next))
 	if err := e.App.Save(order); err != nil {
 		return fmt.Errorf("save order: %w", err)
 	}

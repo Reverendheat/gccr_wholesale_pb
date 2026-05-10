@@ -23,11 +23,26 @@ export async function fetchCustomers(): Promise<CustomerRecord[]> {
   });
 }
 
-export async function updateOrderStatus(
+export type OrderEvent =
+  | "staff_confirm"
+  | "staff_mark_delivered"
+  | "staff_cancel";
+
+export async function sendOrderEvent(
   id: string,
-  status: string,
-): Promise<void> {
-  await pb.collection("orders").update(id, { status }, { requestKey: null });
+  event: OrderEvent,
+): Promise<Order> {
+  const res = await fetch(`${BASE}/orders/${id}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ event }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Order update failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.order;
 }
 
 export interface SendInvoiceResult {

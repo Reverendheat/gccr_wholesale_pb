@@ -48,12 +48,6 @@
 .meta-sub { font-size: 0.8rem; color: var(--text-muted); }
 
 .drawer-status-control { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-.status-select {
-  border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 0.3rem 0.6rem; font-size: 0.875rem; background: var(--surface);
-  color: var(--text); cursor: pointer;
-}
-.status-select:focus { outline: none; border-color: var(--primary); }
 
 .drawer-items-table { width: 100%; border-collapse: collapse; }
 .drawer-items-table th, .drawer-items-table td {
@@ -83,6 +77,18 @@
 }
 .btn-send-invoice:hover:not(:disabled) { background: #047857; }
 .btn-send-invoice:disabled { opacity: 0.6; cursor: not-allowed; }
+.workflow-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.btn-action {
+  padding: 0.42rem 0.9rem; font-size: 0.85rem; font-weight: 600;
+  background: var(--primary); color: #fff; border: none; border-radius: var(--radius);
+  cursor: pointer;
+}
+.btn-action:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-action-danger {
+  background: transparent; color: var(--error); border: 1px solid var(--error);
+}
+.btn-action-danger:hover:not(:disabled) { background: #fee2e2; }
+.btn-action:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Section header with action button */
 .section-header {
@@ -131,3 +137,4 @@
 .status-invoiced  { background: #ede9fe; color: #5b21b6; }
 .status-paid      { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
+.status-needs_review { background: #fef3c7; color: #854d0e; }

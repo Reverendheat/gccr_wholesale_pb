@@ -9,6 +9,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/reverendheat/gccr_invoice/internal/orders"
+	"github.com/reverendheat/gccr_invoice/internal/orders/fsm"
 	"github.com/reverendheat/gccr_invoice/internal/square"
 	squaresdk "github.com/square/square-go-sdk/v3"
 )
@@ -129,7 +130,7 @@ func advanceBy(from time.Time, frequency string) time.Time {
 func reconcileInvoices(app core.App, sq *square.Client) error {
 	invoiced, err := app.FindRecordsByFilter(
 		"orders",
-		"(status = 'invoiced' || status = 'paid') && squareInvoiceId != ''",
+		"squareInvoiceId != '' && (status = 'invoiced' || squareInvoiceUrl = '')",
 		"+created", 200, 0,
 	)
 	if err != nil {
@@ -151,9 +152,14 @@ func reconcileInvoices(app core.App, sq *square.Client) error {
 			changed = true
 		}
 
-		if inv.Status != nil && *inv.Status == squaresdk.InvoiceStatusPaid && order.GetString("status") != "paid" {
-			order.Set("status", "paid")
-			changed = true
+		if inv.Status != nil && *inv.Status == squaresdk.InvoiceStatusPaid && order.GetString("status") != string(fsm.StatusPaid) {
+			next, err := fsm.Apply(fsm.Status(order.GetString("status")), fsm.EventSquareInvoicePaid)
+			if err != nil {
+				log.Printf("reconcile: order %s: could not apply paid event: %v", order.Id, err)
+			} else {
+				order.Set("status", string(next))
+				changed = true
+			}
 		}
 
 		if changed {

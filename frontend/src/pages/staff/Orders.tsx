@@ -1,49 +1,63 @@
 import { useEffect, useState } from "react";
-import { fetchStaffOrders, updateOrderStatus, sendInvoice, type Order } from "../../lib/api";
+import {
+  fetchStaffOrders,
+  sendInvoice,
+  sendOrderEvent,
+  type Order,
+  type OrderEvent,
+} from "../../lib/api";
 import "./Orders.css";
-
-const ORDER_STATUSES = [
-  "pending",
-  "confirmed",
-  "delivered",
-  "invoiced",
-  "paid",
-  "cancelled",
-] as const;
 
 function formatDate(iso: string): string {
   if (!iso) return "—";
   return new Date(iso.replace(" ", "T")).toLocaleDateString();
 }
 
+function availableActions(status: string): { event: OrderEvent; label: string; danger?: boolean }[] {
+  switch (status) {
+    case "pending":
+      return [
+        { event: "staff_confirm", label: "Confirm" },
+        { event: "staff_cancel", label: "Cancel", danger: true },
+      ];
+    case "confirmed":
+      return [
+        { event: "staff_mark_delivered", label: "Mark delivered" },
+        { event: "staff_cancel", label: "Cancel", danger: true },
+      ];
+    case "delivered":
+    case "needs_review":
+      return [{ event: "staff_cancel", label: "Cancel", danger: true }];
+    default:
+      return [];
+  }
+}
+
 function OrderDrawer({
   order,
   onClose,
-  onStatusChange,
   onOrderUpdate,
 }: {
   order: Order;
   onClose: () => void;
-  onStatusChange: (id: string, status: string) => void;
   onOrderUpdate: (updated: Order) => void;
 }) {
-  const [status, setStatus] = useState(order.status);
-  const [saving, setSaving] = useState(false);
+  const [savingEvent, setSavingEvent] = useState<OrderEvent | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [invoicing, setInvoicing] = useState(false);
   const customer = order.expand?.customer;
+  const actions = availableActions(order.status);
 
-  async function handleStatusChange(newStatus: string) {
-    setSaving(true);
+  async function handleOrderEvent(event: OrderEvent) {
+    setSavingEvent(event);
     setSaveError(null);
     try {
-      await updateOrderStatus(order.id, newStatus);
-      setStatus(newStatus);
-      onStatusChange(order.id, newStatus);
+      const updated = await sendOrderEvent(order.id, event);
+      onOrderUpdate(updated);
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : "Failed to update status");
     } finally {
-      setSaving(false);
+      setSavingEvent(null);
     }
   }
 
@@ -52,8 +66,6 @@ function OrderDrawer({
     setSaveError(null);
     try {
       const result = await sendInvoice(order.id);
-      setStatus("invoiced");
-      onStatusChange(order.id, "invoiced");
       onOrderUpdate(result.order);
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : "Failed to send invoice");
@@ -65,8 +77,7 @@ function OrderDrawer({
   const canSendInvoice =
     order.squareOrderId &&
     !order.squareInvoiceId &&
-    status !== "paid" &&
-    status !== "cancelled";
+    !["paid", "cancelled", "needs_review"].includes(order.status);
 
   return (
     <>
@@ -119,19 +130,9 @@ function OrderDrawer({
               <div className="meta-row">
                 <span className="meta-label">Status</span>
                 <span className="drawer-status-control">
-                  <select
-                    value={status}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                    disabled={saving}
-                    className="status-select"
-                  >
-                    {ORDER_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s.charAt(0).toUpperCase() + s.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                  {saving && <span className="meta-sub">Saving…</span>}
+                  <span className={`status-badge status-${order.status}`}>
+                    {order.status.replace("_", " ")}
+                  </span>
                   {saveError && (
                     <span className="staff-error">{saveError}</span>
                   )}
@@ -171,6 +172,24 @@ function OrderDrawer({
             </section>
           )}
 
+          {actions.length > 0 && (
+            <section className="drawer-section">
+              <h4 className="drawer-section-title">Actions</h4>
+              <div className="workflow-actions">
+                {actions.map((action) => (
+                  <button
+                    key={action.event}
+                    className={action.danger ? "btn-action btn-action-danger" : "btn-action"}
+                    onClick={() => handleOrderEvent(action.event)}
+                    disabled={savingEvent !== null}
+                  >
+                    {savingEvent === action.event ? "Saving…" : action.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Invoice */}
           <section className="drawer-section">
             <h4 className="drawer-section-title">Invoice</h4>
@@ -205,10 +224,12 @@ function OrderDrawer({
               </div>
             ) : (
               <p className="muted">
-                {status === "paid"
+                {order.status === "paid"
                   ? "Order is already paid."
-                  : status === "cancelled"
+                  : order.status === "cancelled"
                     ? "Cannot invoice a cancelled order."
+                    : order.status === "needs_review"
+                      ? "Review this order before invoicing."
                     : "No Square order linked."}
               </p>
             )}
@@ -233,13 +254,6 @@ export default function Orders() {
       )
       .finally(() => setLoading(false));
   }, []);
-
-  function handleStatusChange(id: string, status: string) {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status } : o))
-    );
-    setSelected((prev) => (prev?.id === id ? { ...prev, status } : prev));
-  }
 
   function handleOrderUpdate(updated: Order) {
     setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
@@ -306,7 +320,6 @@ export default function Orders() {
         <OrderDrawer
           order={selected}
           onClose={() => setSelected(null)}
-          onStatusChange={handleStatusChange}
           onOrderUpdate={handleOrderUpdate}
         />
       )}

@@ -14,6 +14,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/mailer"
 	"github.com/reverendheat/gccr_invoice/internal/orders"
+	"github.com/reverendheat/gccr_invoice/internal/orders/fsm"
 	"github.com/reverendheat/gccr_invoice/internal/square"
 )
 
@@ -30,6 +31,9 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string) {
 
 	// GET /api/wholesale/orders — list orders (customers see own; staff see all)
 	g.GET("/orders", handleListOrders())
+
+	// POST /api/wholesale/orders/{id}/events — staff applies a workflow event
+	g.POST("/orders/{id}/events", handleOrderEvent())
 
 	// POST /api/wholesale/scheduled-orders — customer creates a recurring order
 	g.POST("/scheduled-orders", handleCreateScheduledOrder(sq, locationID))
@@ -172,6 +176,59 @@ func handleListOrders() func(*core.RequestEvent) error {
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{"orders": records})
+	}
+}
+
+type orderEventBody struct {
+	Event string `json:"event"`
+}
+
+var staffOrderEvents = map[fsm.Event]bool{
+	fsm.EventStaffConfirm:       true,
+	fsm.EventStaffMarkDelivered: true,
+	fsm.EventStaffCancel:        true,
+}
+
+func handleOrderEvent() func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "users" {
+			return e.ForbiddenError("Only staff can update order workflow", nil)
+		}
+
+		var body orderEventBody
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Invalid request body", err)
+		}
+		if body.Event == "" {
+			return e.BadRequestError("event is required", nil)
+		}
+		event := fsm.Event(body.Event)
+		if !staffOrderEvents[event] {
+			return e.BadRequestError("event is not allowed for staff workflow updates", nil)
+		}
+
+		order, err := e.App.FindRecordById("orders", e.Request.PathValue("id"))
+		if err != nil {
+			return e.NotFoundError("Order not found", err)
+		}
+
+		next, err := fsm.Apply(fsm.Status(order.GetString("status")), event)
+		if err != nil {
+			return e.BadRequestError(err.Error(), err)
+		}
+
+		order.Set("status", string(next))
+		if err := e.App.Save(order); err != nil {
+			return e.InternalServerError("Could not update order", err)
+		}
+
+		order, err = e.App.FindRecordById("orders", order.Id)
+		if err != nil {
+			return e.InternalServerError("Could not refresh order", err)
+		}
+		_ = e.App.ExpandRecord(order, []string{"customer"}, nil)
+
+		return e.JSON(http.StatusOK, map[string]any{"order": order})
 	}
 }
 
@@ -355,6 +412,10 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 		if order.GetString("squareInvoiceId") != "" {
 			return e.BadRequestError("Invoice already sent for this order", nil)
 		}
+		next, err := fsm.Apply(fsm.Status(order.GetString("status")), fsm.EventStaffSendInvoice)
+		if err != nil {
+			return e.BadRequestError(err.Error(), err)
+		}
 
 		customerRecord, err := e.App.FindRecordById("customers", order.GetString("customer"))
 		if err != nil {
@@ -384,7 +445,7 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 
 		order.Set("squareInvoiceId", *invoice.ID)
 		order.Set("squareInvoiceUrl", publicURL)
-		order.Set("status", "invoiced")
+		order.Set("status", string(next))
 		if err := e.App.Save(order); err != nil {
 			return e.InternalServerError("Could not update order", err)
 		}
