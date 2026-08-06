@@ -7,14 +7,16 @@ import (
 	squaresdk "github.com/square/square-go-sdk/v3"
 )
 
-const wholesaleCategoryID = "XOCS7UGPDHGI62BVN5FXHR5W"
-
-// GetWholesaleCatalog returns all active items in the Wholesale category.
+// GetWholesaleCatalog returns all active items in the configured Wholesale category.
 // Item variations with VARIABLE_PRICING are excluded — only fixed-price
 // variations are supported for ordering.
 func (c *Client) GetWholesaleCatalog(ctx context.Context) ([]*squaresdk.CatalogObject, error) {
+	if c.WholesaleCategoryID == "" {
+		return nil, fmt.Errorf("square: wholesale category ID is required")
+	}
+
 	resp, err := c.SDK.Catalog.SearchItems(ctx, &squaresdk.SearchCatalogItemsRequest{
-		CategoryIDs: []string{wholesaleCategoryID},
+		CategoryIDs: []string{c.WholesaleCategoryID},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("square: GetWholesaleCatalog: %w", err)

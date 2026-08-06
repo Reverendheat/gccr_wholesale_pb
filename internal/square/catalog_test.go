@@ -11,7 +11,9 @@ import (
 	"github.com/square/square-go-sdk/v3/option"
 )
 
-func TestGetWholesaleCatalog_Success(t *testing.T) {
+func TestGetWholesaleCatalog_UsesConfiguredCategory(t *testing.T) {
+	const categoryID = "configured-category-id"
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -26,8 +28,8 @@ func TestGetWholesaleCatalog_Success(t *testing.T) {
 			t.Fatalf("could not decode request body: %v", err)
 		}
 		catIDs, ok := body["category_ids"].([]any)
-		if !ok || len(catIDs) == 0 || catIDs[0] != wholesaleCategoryID {
-			t.Errorf("expected wholesale category ID in request, got %v", body)
+		if !ok || len(catIDs) == 0 || catIDs[0] != categoryID {
+			t.Errorf("expected configured category ID in request, got %v", body)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -63,7 +65,10 @@ func TestGetWholesaleCatalog_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := &Client{SDK: squareclient.NewClient(option.WithToken("tok"), option.WithBaseURL(srv.URL))}
+	c := &Client{
+		SDK:                 squareclient.NewClient(option.WithToken("tok"), option.WithBaseURL(srv.URL)),
+		WholesaleCategoryID: categoryID,
+	}
 	items, err := c.GetWholesaleCatalog(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -73,13 +78,24 @@ func TestGetWholesaleCatalog_Success(t *testing.T) {
 	}
 }
 
+func TestGetWholesaleCatalog_RequiresCategoryID(t *testing.T) {
+	c := &Client{}
+	_, err := c.GetWholesaleCatalog(context.Background())
+	if err == nil {
+		t.Fatal("expected error when wholesale category ID is empty")
+	}
+}
+
 func TestGetWholesaleCatalog_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
-	c := &Client{SDK: squareclient.NewClient(option.WithToken("tok"), option.WithBaseURL(srv.URL))}
+	c := &Client{
+		SDK:                 squareclient.NewClient(option.WithToken("tok"), option.WithBaseURL(srv.URL)),
+		WholesaleCategoryID: "configured-category-id",
+	}
 	_, err := c.GetWholesaleCatalog(context.Background())
 	if err == nil {
 		t.Fatal("expected error on 500, got nil")

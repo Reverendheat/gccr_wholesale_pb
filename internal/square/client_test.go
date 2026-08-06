@@ -17,3 +17,13 @@ func TestNew_ProductionURL(t *testing.T) {
 		t.Fatal("expected SDK client to be non-nil")
 	}
 }
+
+func TestNew_ConfiguresWholesaleCategory(t *testing.T) {
+	c := New(Config{
+		AccessToken:         "tok",
+		WholesaleCategoryID: "category-id",
+	})
+	if c.WholesaleCategoryID != "category-id" {
+		t.Fatalf("expected configured wholesale category ID, got %q", c.WholesaleCategoryID)
+	}
+}

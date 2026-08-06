@@ -9,13 +9,15 @@ import (
 
 // Client wraps the official Square Go SDK client.
 type Client struct {
-	SDK *squareclient.Client
+	SDK                 *squareclient.Client
+	WholesaleCategoryID string
 }
 
 // Config holds Square API configuration loaded from environment variables.
 type Config struct {
-	AccessToken string
-	Sandbox     bool
+	AccessToken         string
+	Sandbox             bool
+	WholesaleCategoryID string
 }
 
 // New creates a new Square Client from the provided config.
@@ -27,6 +29,7 @@ func New(cfg Config) *Client {
 		opts = append(opts, option.WithBaseURL(squaresdk.Environments.Sandbox))
 	}
 	return &Client{
-		SDK: squareclient.NewClient(opts...),
+		SDK:                 squareclient.NewClient(opts...),
+		WholesaleCategoryID: cfg.WholesaleCategoryID,
 	}
 }

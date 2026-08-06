@@ -33,11 +33,15 @@ func main() {
 	})
 
 	sqCfg := square.Config{
-		AccessToken: os.Getenv("SQUARE_ACCESS_TOKEN"),
-		Sandbox:     os.Getenv("SQUARE_SANDBOX") == "true",
+		AccessToken:         os.Getenv("SQUARE_ACCESS_TOKEN"),
+		Sandbox:             os.Getenv("SQUARE_SANDBOX") == "true",
+		WholesaleCategoryID: os.Getenv("SQUARE_WHOLESALE_CATEGORY_ID"),
 	}
 	if sqCfg.AccessToken == "" {
 		log.Fatal("SQUARE_ACCESS_TOKEN environment variable is required")
+	}
+	if sqCfg.WholesaleCategoryID == "" {
+		log.Fatal("SQUARE_WHOLESALE_CATEGORY_ID environment variable is required")
 	}
 
 	locationID := os.Getenv("SQUARE_LOCATION_ID")
