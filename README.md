@@ -51,6 +51,14 @@ gccr_wholesale/
    ```
    App runs at `http://localhost:5173`.
 
+## Database Migrations
+
+Go migrations in `pb_migrations/` are embedded in the server binary and run automatically before the HTTP server starts. PocketBase sorts migration filenames lexicographically and records applied filenames in the database.
+
+- Add a new migration file for every schema change; never edit an applied migration.
+- Use timestamp filenames (`<unix_timestamp>_<description>.go`) so new migrations sort after existing files.
+- Test migrations against an empty data directory as well as existing data before deployment.
+
 ## Running Tests
 
 ```sh
