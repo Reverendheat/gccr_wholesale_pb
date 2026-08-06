@@ -67,13 +67,16 @@ Delete corresponding `users` record in PocketBase, then verify staff can no long
 Normal customer onboarding happens through staff portal, not PocketBase admin:
 
 1. Customer must already exist in active Square environment.
-2. Staff invites exact Square email.
-3. Application creates local `customers` auth record referencing Square customer ID.
-4. Customer receives welcome email and uses OTP login.
+2. Staff enters exact Square email and previews matching Square customer.
+3. Staff confirms existing wholesale account or creates one. Square `company_name` is only a suggestion; never grant access from name matching alone.
+4. Application creates local `customers` auth record referencing Square customer ID and wholesale account.
+5. Customer receives welcome email and uses OTP login.
 
-Use PocketBase admin only for support or data repair. Before deleting customer, check related orders and schedules. Orders reference customer records.
+Square remains source of truth for customer contact and billing details. GCCR Wholesale remains source of truth for wholesale-account membership and shared access.
 
-`companies` collection and optional `customers.company` relation exist, but current application UI does not use company grouping.
+Account members can view account orders, invoices, and active schedules. Only schedule creator can cancel schedule. Orders and schedules snapshot account at creation, so later customer reassignment does not move historical records between accounts. First assignment of previously unassigned customer backfills only that customer's unassigned records.
+
+Staff can change assignment from **Customers → Wholesale Account**. Review unassigned customers after deployment. Use PocketBase admin only for support or data repair. Before deleting or reassigning customer, check related orders and schedules.
 
 ## Operational checks
 

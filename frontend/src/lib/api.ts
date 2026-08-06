@@ -7,19 +7,36 @@ const BASE = "/api/wholesale";
 // expansion and the standard collection API without a custom backend route.
 // ---------------------------------------------------------------------------
 
+export interface CompanyRecord {
+  id: string;
+  name: string;
+}
+
 export interface CustomerRecord {
   id: string;
   name: string;
   email: string;
   phone: string;
   squareCustomerId: string;
+  company: string;
   created: string;
+  expand?: {
+    company?: CompanyRecord;
+  };
 }
 
 export async function fetchCustomers(): Promise<CustomerRecord[]> {
   return pb.collection("customers").getFullList<CustomerRecord>({
     sort: "name",
+    expand: "company",
     requestKey: null, // disable auto-cancellation so StrictMode double-mount doesn't abort the request
+  });
+}
+
+export async function fetchCompanies(): Promise<CompanyRecord[]> {
+  return pb.collection("companies").getFullList<CompanyRecord>({
+    sort: "name",
+    requestKey: null,
   });
 }
 
@@ -96,9 +113,16 @@ export interface LineItemInput {
   note?: string;
 }
 
+export interface SubmittedBy {
+  id: string;
+  name: string;
+}
+
 export interface Order {
   id: string;
   customer: string;
+  company: string;
+  submittedBy?: SubmittedBy;
   status: string;
   notes: string;
   lineItems: LineItemInput[];
@@ -128,6 +152,8 @@ export type ScheduleFrequency = "weekly" | "biweekly" | "monthly" | "quarterly";
 export interface ScheduledOrder {
   id: string;
   customer: string;
+  company: string;
+  submittedBy?: SubmittedBy;
   frequency: ScheduleFrequency;
   lineItems: LineItemInput[];
   notes: string;
@@ -198,21 +224,76 @@ export async function cancelScheduledOrder(id: string): Promise<void> {
   if (!res.ok) throw new Error(`Cancel failed: ${res.status}`);
 }
 
-export interface InviteResult {
+export interface SquareCustomerPreview {
   id: string;
-  email: string;
   name: string;
+  email: string;
+  phone: string;
+  company_name: string;
 }
 
-export async function inviteCustomer(email: string): Promise<InviteResult> {
-  const res = await fetch(`${BASE}/invite`, {
+export interface PreviewCustomerResult {
+  customer: SquareCustomerPreview;
+  suggested_accounts: CompanyRecord[];
+}
+
+export async function previewCustomer(email: string): Promise<PreviewCustomerResult> {
+  const res = await fetch(`${BASE}/customers/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ email }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Square lookup failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface AccountSelection {
+  company_id?: string;
+  new_company_name?: string;
+}
+
+export interface InviteResult {
+  id: string;
+  email: string;
+  name: string;
+  phone: string;
+  squareCustomerId: string;
+  company: string;
+  expand: { company: CompanyRecord };
+}
+
+export async function inviteCustomer(
+  email: string,
+  account: AccountSelection,
+): Promise<InviteResult> {
+  const res = await fetch(`${BASE}/invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ email, ...account }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
     throw new Error(err.message ?? `Invite failed: ${res.status}`);
   }
   return res.json();
+}
+
+export async function assignCustomerAccount(
+  customerId: string,
+  account: AccountSelection,
+): Promise<CustomerRecord> {
+  const res = await fetch(`${BASE}/customers/${customerId}/account`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(account),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Account assignment failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.customer;
 }

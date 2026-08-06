@@ -27,7 +27,7 @@ func Create(
 	ctx context.Context,
 	app core.App,
 	sq *square.Client,
-	locationID, customerID, squareCustomerID string,
+	locationID, customerID, companyID, squareCustomerID string,
 	items []LineItem,
 	notes, idempotencyKey string,
 ) (*core.Record, error) {
@@ -53,6 +53,7 @@ func Create(
 
 	pbOrder := core.NewRecord(ordersCollection)
 	pbOrder.Set("customer", customerID)
+	pbOrder.Set("company", companyID)
 	pbOrder.Set("status", "pending")
 	pbOrder.Set("notes", notes)
 	pbOrder.Set("lineItems", lineItemsSnapshot)

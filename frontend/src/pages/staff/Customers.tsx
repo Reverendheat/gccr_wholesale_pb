@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { fetchCustomers, inviteCustomer, type CustomerRecord } from "../../lib/api";
+import {
+  assignCustomerAccount,
+  fetchCompanies,
+  fetchCustomers,
+  inviteCustomer,
+  previewCustomer,
+  type CompanyRecord,
+  type CustomerRecord,
+  type SquareCustomerPreview,
+} from "../../lib/api";
 import "./Orders.css";
 
 function formatDate(iso: string): string {
@@ -8,13 +17,18 @@ function formatDate(iso: string): string {
 }
 
 function InviteModal({
+  companies,
   onClose,
   onInvited,
 }: {
+  companies: CompanyRecord[];
   onClose: () => void;
   onInvited: (c: CustomerRecord) => void;
 }) {
   const [email, setEmail] = useState("");
+  const [preview, setPreview] = useState<SquareCustomerPreview | null>(null);
+  const [companyId, setCompanyId] = useState("");
+  const [newCompanyName, setNewCompanyName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,13 +42,25 @@ function InviteModal({
     setError(null);
     setSubmitting(true);
     try {
-      const result = await inviteCustomer(email.trim());
+      if (!preview) {
+        const result = await previewCustomer(email.trim());
+        setPreview(result.customer);
+        if (result.suggested_accounts.length === 1) {
+          setCompanyId(result.suggested_accounts[0].id);
+        } else if (result.customer.company_name) {
+          setNewCompanyName(result.customer.company_name);
+        }
+        return;
+      }
+
+      if (!companyId && !newCompanyName.trim()) {
+        throw new Error("Select or create a wholesale account");
+      }
+      const result = await inviteCustomer(email.trim(), companyId
+        ? { company_id: companyId }
+        : { new_company_name: newCompanyName.trim() });
       onInvited({
-        id: result.id,
-        name: result.name,
-        email: result.email,
-        phone: "",
-        squareCustomerId: "",
+        ...result,
         created: new Date().toISOString(),
       });
       onClose();
@@ -50,8 +76,7 @@ function InviteModal({
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <h3>Invite Customer</h3>
         <p className="muted modal-desc">
-          Enter the customer's email address. We'll look them up in Square,
-          create their account, and email them a link to set their password.
+          Match customer in Square, then confirm wholesale account membership.
         </p>
         <form onSubmit={handleSubmit} className="invite-form">
           <label>
@@ -60,19 +85,59 @@ function InviteModal({
               ref={inputRef}
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setPreview(null);
+                setCompanyId("");
+                setNewCompanyName("");
+              }}
               placeholder="customer@example.com"
               required
+              disabled={preview !== null}
               autoComplete="off"
             />
           </label>
+
+          {preview && (
+            <>
+              <div className="modal-desc">
+                <strong>{preview.name}</strong><br />
+                <span className="muted">Square company: {preview.company_name || "Not set"}</span>
+              </div>
+              <label>
+                Existing wholesale account
+                <select
+                  value={companyId}
+                  onChange={(e) => {
+                    setCompanyId(e.target.value);
+                    if (e.target.value) setNewCompanyName("");
+                  }}
+                >
+                  <option value="">Select account…</option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Or create wholesale account
+                <input
+                  value={newCompanyName}
+                  onChange={(e) => {
+                    setNewCompanyName(e.target.value);
+                    if (e.target.value) setCompanyId("");
+                  }}
+                  placeholder="Business or account name"
+                />
+              </label>
+            </>
+          )}
+
           {error && <p className="staff-error modal-error">{error}</p>}
           <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
+            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" disabled={submitting}>
-              {submitting ? "Sending invite…" : "Send invite"}
+              {submitting ? "Working…" : preview ? "Send invite" : "Look up in Square"}
             </button>
           </div>
         </form>
@@ -83,28 +148,87 @@ function InviteModal({
 
 export default function Customers() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchCustomers()
-      .then(setCustomers)
+    Promise.all([fetchCustomers(), fetchCompanies()])
+      .then(([customerList, companyList]) => {
+        setCustomers(customerList);
+        setCompanies(companyList);
+      })
       .catch((e: unknown) =>
         setError(e instanceof Error ? e.message : "Failed to load customers")
       )
       .finally(() => setLoading(false));
   }, []);
 
-  function handleInvited(c: CustomerRecord) {
-    setCustomers((prev) => [c, ...prev]);
-    setSuccessMsg(`Invite sent to ${c.email} — they'll receive a link to set their password.`);
+  function recordCompany(company?: CompanyRecord) {
+    if (!company || companies.some((c) => c.id === company.id)) return;
+    setCompanies((prev) => [...prev, company].sort((a, b) => a.name.localeCompare(b.name)));
+  }
+
+  function handleInvited(customer: CustomerRecord) {
+    setCustomers((prev) => [customer, ...prev]);
+    recordCompany(customer.expand?.company);
+    setSuccessMsg(`Invite sent to ${customer.email}. They can sign in using a one-time code.`);
     setTimeout(() => setSuccessMsg(null), 6000);
   }
 
+  async function saveAccountSelection(
+    customer: CustomerRecord,
+    selection: { company_id?: string; new_company_name?: string },
+  ) {
+    setAssigning(customer.id);
+    setError(null);
+    try {
+      const updated = await assignCustomerAccount(customer.id, selection);
+      setCustomers((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+      recordCompany(updated.expand?.company);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not assign account");
+    } finally {
+      setAssigning(null);
+    }
+  }
+
+  async function handleAccountChange(customer: CustomerRecord, value: string) {
+    if (value === "__new") {
+      const name = window.prompt("New wholesale account name")?.trim();
+      if (name) await saveAccountSelection(customer, { new_company_name: name });
+    } else if (value) {
+      await saveAccountSelection(customer, { company_id: value });
+    }
+  }
+
+  async function handleSquareReconcile(customer: CustomerRecord) {
+    setAssigning(customer.id);
+    setError(null);
+    try {
+      const result = await previewCustomer(customer.email);
+      const squareName = result.customer.company_name.trim();
+      if (!squareName) throw new Error("Square customer has no company name");
+
+      if (result.suggested_accounts.length === 1) {
+        const account = result.suggested_accounts[0];
+        if (!window.confirm(`Square company is “${squareName}”. Link to existing account “${account.name}”?`)) return;
+        await saveAccountSelection(customer, { company_id: account.id });
+      } else {
+        if (!window.confirm(`Square company is “${squareName}”. Create this wholesale account?`)) return;
+        await saveAccountSelection(customer, { new_company_name: squareName });
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not reconcile Square company");
+    } finally {
+      setAssigning(null);
+    }
+  }
+
   if (loading) return <p className="muted">Loading customers…</p>;
-  if (error) return <p className="staff-error">{error}</p>;
 
   return (
     <div>
@@ -113,33 +237,57 @@ export default function Customers() {
         <button onClick={() => setShowInvite(true)}>+ Invite Customer</button>
       </div>
 
+      {error && <p className="staff-error">{error}</p>}
       {successMsg && <p className="staff-success">{successMsg}</p>}
 
       {customers.length === 0 ? (
-        <p className="muted">No customers yet. Use the button above to invite one.</p>
+        <p className="muted">No customers yet. Use button above to invite one.</p>
       ) : (
         <table className="orders-table">
           <thead>
             <tr>
               <th>Name</th>
               <th>Email</th>
+              <th>Wholesale Account</th>
               <th>Phone</th>
               <th>Square ID</th>
               <th>Registered</th>
             </tr>
           </thead>
           <tbody>
-            {customers.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name || "—"}</td>
-                <td>{c.email}</td>
-                <td>{c.phone || "—"}</td>
-                <td className="mono">
-                  {c.squareCustomerId
-                    ? c.squareCustomerId.slice(0, 12) + "…"
-                    : "—"}
+            {customers.map((customer) => (
+              <tr key={customer.id}>
+                <td>{customer.name || "—"}</td>
+                <td>{customer.email}</td>
+                <td className="account-cell">
+                  <select
+                    value={customer.company || ""}
+                    onChange={(e) => handleAccountChange(customer, e.target.value)}
+                    disabled={assigning === customer.id}
+                    aria-label={`Wholesale account for ${customer.name || customer.email}`}
+                  >
+                    <option value="">Unassigned</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>{company.name}</option>
+                    ))}
+                    <option value="__new">+ Create new account…</option>
+                  </select>
+                  {!customer.company && (
+                    <button
+                      type="button"
+                      className="account-reconcile"
+                      onClick={() => handleSquareReconcile(customer)}
+                      disabled={assigning === customer.id}
+                    >
+                      Use Square company
+                    </button>
+                  )}
                 </td>
-                <td>{formatDate(c.created)}</td>
+                <td>{customer.phone || "—"}</td>
+                <td className="mono">
+                  {customer.squareCustomerId ? `${customer.squareCustomerId.slice(0, 12)}…` : "—"}
+                </td>
+                <td>{formatDate(customer.created)}</td>
               </tr>
             ))}
           </tbody>
@@ -148,6 +296,7 @@ export default function Customers() {
 
       {showInvite && (
         <InviteModal
+          companies={companies}
           onClose={() => setShowInvite(false)}
           onInvited={handleInvited}
         />

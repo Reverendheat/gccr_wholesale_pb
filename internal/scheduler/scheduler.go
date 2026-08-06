@@ -89,7 +89,7 @@ func processOne(app core.App, sq *square.Client, locationID string, sr *core.Rec
 
 	pbOrder, err := orders.Create(
 		ctx, app, sq,
-		locationID, sr.GetString("customer"), squareCustomerID,
+		locationID, sr.GetString("customer"), sr.GetString("company"), squareCustomerID,
 		items, sr.GetString("notes"), idempotencyKey,
 	)
 	if err != nil {
