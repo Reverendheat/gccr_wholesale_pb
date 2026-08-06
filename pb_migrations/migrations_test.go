@@ -3,14 +3,20 @@ package pb_migrations
 import (
 	"testing"
 
+	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 
-func TestOrderStatusMigrationRunsAfterOrdersCreation(t *testing.T) {
+func migrationPositions() map[string]int {
 	positions := make(map[string]int)
 	for i, migration := range core.AppMigrations.Items() {
 		positions[migration.File] = i
 	}
+	return positions
+}
+
+func TestOrderStatusMigrationRunsAfterOrdersCreation(t *testing.T) {
+	positions := migrationPositions()
 
 	createOrders, ok := positions["4_create_orders.go"]
 	if !ok {
@@ -24,5 +30,68 @@ func TestOrderStatusMigrationRunsAfterOrdersCreation(t *testing.T) {
 
 	if addStatus <= createOrders {
 		t.Fatalf("needs_review migration position %d must follow orders creation position %d", addStatus, createOrders)
+	}
+}
+
+func TestAccountAccessMigrationAppliesAccountRelationsAndRules(t *testing.T) {
+	app := pocketbase.NewWithConfig(pocketbase.Config{
+		DefaultDataDir:  t.TempDir(),
+		HideStartBanner: true,
+	})
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+	defer app.ResetBootstrapState()
+
+	if err := app.RunAppMigrations(); err != nil {
+		t.Fatalf("run app migrations: %v", err)
+	}
+
+	for _, collectionName := range []string{"orders", "scheduledOrders"} {
+		collection, err := app.FindCollectionByNameOrId(collectionName)
+		if err != nil {
+			t.Fatalf("find %s: %v", collectionName, err)
+		}
+		if collection.Fields.GetByName("company") == nil {
+			t.Fatalf("%s.company relation missing", collectionName)
+		}
+		if collection.ListRule == nil || *collection.ListRule != accountReadRule {
+			t.Fatalf("%s list rule = %v, want %q", collectionName, collection.ListRule, accountReadRule)
+		}
+		if collection.ViewRule == nil || *collection.ViewRule != accountReadRule {
+			t.Fatalf("%s view rule = %v, want %q", collectionName, collection.ViewRule, accountReadRule)
+		}
+	}
+
+	runner := core.NewMigrationsRunner(app, core.AppMigrations)
+	if _, err := runner.Down(1); err != nil {
+		t.Fatalf("rollback account access migration: %v", err)
+	}
+	for _, collectionName := range []string{"orders", "scheduledOrders"} {
+		collection, err := app.FindCollectionByNameOrId(collectionName)
+		if err != nil {
+			t.Fatalf("find %s after rollback: %v", collectionName, err)
+		}
+		if collection.Fields.GetByName("company") != nil {
+			t.Fatalf("%s.company relation remains after rollback", collectionName)
+		}
+	}
+}
+
+func TestAccountAccessMigrationRunsAfterCompanyCreation(t *testing.T) {
+	positions := migrationPositions()
+
+	createCompanies, ok := positions["7_create_companies.go"]
+	if !ok {
+		t.Fatal("companies creation migration is not registered")
+	}
+
+	accountAccess, ok := positions["9c_add_account_access.go"]
+	if !ok {
+		t.Fatal("account access migration is not registered")
+	}
+
+	if accountAccess <= createCompanies {
+		t.Fatalf("account access migration position %d must follow companies creation position %d", accountAccess, createCompanies)
 	}
 }

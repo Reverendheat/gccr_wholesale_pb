@@ -16,6 +16,7 @@ import (
 	"github.com/reverendheat/gccr_invoice/internal/orders"
 	"github.com/reverendheat/gccr_invoice/internal/orders/fsm"
 	"github.com/reverendheat/gccr_invoice/internal/square"
+	squaresdk "github.com/square/square-go-sdk/v3"
 )
 
 // Register binds all custom application routes onto the serve event.
@@ -29,7 +30,7 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string) {
 	// POST /api/wholesale/orders — customer submits a one-time order
 	g.POST("/orders", handleCreateOrder(sq, locationID))
 
-	// GET /api/wholesale/orders — list orders (customers see own; staff see all)
+	// GET /api/wholesale/orders — customers see own/account records; staff see all
 	g.GET("/orders", handleListOrders())
 
 	// POST /api/wholesale/orders/{id}/events — staff applies a workflow event
@@ -47,7 +48,11 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string) {
 	// POST /api/wholesale/invoices — staff sends a Square invoice for an order
 	g.POST("/invoices", handleSendInvoice(sq, locationID))
 
-	// POST /api/wholesale/invite — staff invites a customer by email (looks up Square, creates account, emails welcome link)
+	// Staff-controlled Square lookup and wholesale-account assignment.
+	g.POST("/customers/preview", handlePreviewCustomer(sq))
+	g.PATCH("/customers/{id}/account", handleAssignCustomerAccount())
+
+	// POST /api/wholesale/invite — staff confirms account membership and invites a Square customer.
 	g.POST("/invite", handleInviteCustomer(sq))
 
 	// Square webhook — must be outside the auth group; Square sends no auth token.
@@ -105,6 +110,56 @@ func toOrderLineItems(inputs []orderLineItemInput) []orders.LineItem {
 	return out
 }
 
+// customerRecordFilter scopes records to those created by the customer or
+// snapshotted to their wholesale account. Creator access remains after an
+// account move, while account snapshots preserve historical visibility.
+func customerRecordFilter(customerID, companyID string, activeOnly bool) string {
+	filter := fmt.Sprintf("customer = '%s'", customerID)
+	if companyID != "" {
+		filter = fmt.Sprintf("(customer = '%s' || company = '%s')", customerID, companyID)
+	}
+	if activeOnly {
+		filter += " && active = true"
+	}
+	return filter
+}
+
+func canCancelScheduledOrder(authCollection, authID, creatorID string) bool {
+	switch authCollection {
+	case "users":
+		return true
+	case "customers":
+		return authID == creatorID
+	default:
+		return false
+	}
+}
+
+func normalizeCompanyName(name string) string {
+	return strings.ToLower(strings.Join(strings.Fields(name), " "))
+}
+
+func validateAccountSelection(companyID, newCompanyName string) error {
+	hasExisting := strings.TrimSpace(companyID) != ""
+	hasNew := strings.TrimSpace(newCompanyName) != ""
+	if hasExisting == hasNew {
+		return fmt.Errorf("select one existing account or enter one new account name")
+	}
+	return nil
+}
+
+func addSubmittedBy(app core.App, record *core.Record) {
+	customer, err := app.FindRecordById("customers", record.GetString("customer"))
+	if err != nil {
+		return
+	}
+	record.Set("submittedBy", map[string]string{
+		"id":   customer.Id,
+		"name": customer.GetString("name"),
+	})
+	record.WithCustomData(true)
+}
+
 func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
@@ -126,7 +181,7 @@ func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestE
 
 		pbOrder, err := orders.Create(
 			e.Request.Context(), e.App, sq,
-			locationID, e.Auth.Id, squareCustomerID,
+			locationID, e.Auth.Id, e.Auth.GetString("company"), squareCustomerID,
 			toOrderLineItems(body.LineItems), body.Notes,
 			fmt.Sprintf("order-%s", e.Auth.Id+time.Now().UTC().Format("20060102150405")),
 		)
@@ -155,7 +210,7 @@ func handleListOrders() func(*core.RequestEvent) error {
 		case "customers":
 			records, err = e.App.FindRecordsByFilter(
 				"orders",
-				fmt.Sprintf("customer = '%s'", e.Auth.Id),
+				customerRecordFilter(e.Auth.Id, e.Auth.GetString("company"), false),
 				"-id", 100, 0,
 			)
 		default:
@@ -166,10 +221,12 @@ func handleListOrders() func(*core.RequestEvent) error {
 			return e.InternalServerError("Could not fetch orders", err)
 		}
 
-		// Expand the customer relation so the frontend can show customer names.
 		for _, rec := range records {
-			_ = e.App.ExpandRecord(rec, []string{"customer"}, nil)
-			if e.Auth.Collection().Name == "customers" {
+			if e.Auth.Collection().Name == "users" {
+				_ = e.App.ExpandRecord(rec, []string{"customer"}, nil)
+			} else {
+				// Customer responses expose submitter name only, never peer contact data.
+				addSubmittedBy(e.App, rec)
 				rec.Set("squareOrderId", "")
 				rec.Set("squareInvoiceId", "")
 			}
@@ -274,7 +331,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		// Place the first order immediately so the customer sees instant confirmation.
 		firstOrder, err := orders.Create(
 			e.Request.Context(), e.App, sq,
-			locationID, e.Auth.Id, squareCustomerID,
+			locationID, e.Auth.Id, e.Auth.GetString("company"), squareCustomerID,
 			lineItems, body.Notes,
 			fmt.Sprintf("sched-first-%s-%s", e.Auth.Id, time.Now().UTC().Format("20060102150405")),
 		)
@@ -301,6 +358,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 
 		sr := core.NewRecord(scheduledCol)
 		sr.Set("customer", e.Auth.Id)
+		sr.Set("company", e.Auth.GetString("company"))
 		sr.Set("frequency", body.Frequency)
 		sr.Set("lineItems", lineItemsSnapshot)
 		sr.Set("notes", body.Notes)
@@ -341,7 +399,7 @@ func handleListScheduledOrders() func(*core.RequestEvent) error {
 		case "customers":
 			records, err = e.App.FindRecordsByFilter(
 				"scheduledOrders",
-				fmt.Sprintf("customer = '%s' && active = true", e.Auth.Id),
+				customerRecordFilter(e.Auth.Id, e.Auth.GetString("company"), true),
 				"-id", 200, 0,
 			)
 		default:
@@ -350,6 +408,12 @@ func handleListScheduledOrders() func(*core.RequestEvent) error {
 
 		if err != nil {
 			return e.InternalServerError("Could not fetch scheduled orders", err)
+		}
+
+		if e.Auth.Collection().Name == "customers" {
+			for _, record := range records {
+				addSubmittedBy(e.App, record)
+			}
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{"scheduledOrders": records})
@@ -368,8 +432,8 @@ func handleCancelScheduledOrder() func(*core.RequestEvent) error {
 			return e.NotFoundError("Scheduled order not found", err)
 		}
 
-		// Customers may only cancel their own; staff may cancel any.
-		if e.Auth.Collection().Name == "customers" && sr.GetString("customer") != e.Auth.Id {
+		// Account peers have shared visibility, but only the creator may cancel.
+		if !canCancelScheduledOrder(e.Auth.Collection().Name, e.Auth.Id, sr.GetString("customer")) {
 			return e.ForbiddenError("You can only cancel your own scheduled orders", nil)
 		}
 
@@ -464,10 +528,187 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 	}
 }
 
-// --- invite ---
+// --- customer onboarding and account reconciliation ---
+
+type accountSelectionBody struct {
+	CompanyID      string `json:"company_id"`
+	NewCompanyName string `json:"new_company_name"`
+}
+
+type previewCustomerBody struct {
+	Email string `json:"email"`
+}
 
 type inviteCustomerBody struct {
 	Email string `json:"email"`
+	accountSelectionBody
+}
+
+type squareCustomerDetails struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	CompanyName string `json:"company_name"`
+}
+
+func customerDetails(customer *squaresdk.Customer, fallbackEmail string) squareCustomerDetails {
+	details := squareCustomerDetails{Email: fallbackEmail}
+	if customer.ID != nil {
+		details.ID = *customer.ID
+	}
+	givenName := ""
+	if customer.GivenName != nil {
+		givenName = *customer.GivenName
+	}
+	familyName := ""
+	if customer.FamilyName != nil {
+		familyName = *customer.FamilyName
+	}
+	details.Name = strings.TrimSpace(givenName + " " + familyName)
+	if details.Name == "" {
+		details.Name = fallbackEmail
+	}
+	if customer.EmailAddress != nil {
+		details.Email = *customer.EmailAddress
+	}
+	if customer.PhoneNumber != nil {
+		details.Phone = *customer.PhoneNumber
+	}
+	if customer.CompanyName != nil {
+		details.CompanyName = *customer.CompanyName
+	}
+	return details
+}
+
+func findSquareCustomer(sq *square.Client, e *core.RequestEvent, email string) (*squaresdk.Customer, error) {
+	customer, err := sq.SearchCustomerByEmail(e.Request.Context(), strings.TrimSpace(email))
+	if err != nil {
+		return nil, e.InternalServerError("Could not search Square for customer", err)
+	}
+	if customer == nil {
+		return nil, e.BadRequestError("This email isn't registered in Square. Please add them as a customer in Square first, then invite them here.", nil)
+	}
+	return customer, nil
+}
+
+func handlePreviewCustomer(sq *square.Client) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "users" {
+			return e.ForbiddenError("Only staff can preview customers", nil)
+		}
+		var body previewCustomerBody
+		if err := e.BindBody(&body); err != nil || strings.TrimSpace(body.Email) == "" {
+			return e.BadRequestError("email is required", err)
+		}
+
+		customer, err := findSquareCustomer(sq, e, body.Email)
+		if err != nil {
+			return err
+		}
+		details := customerDetails(customer, strings.TrimSpace(body.Email))
+
+		var suggested []map[string]string
+		if details.CompanyName != "" {
+			companies, findErr := e.App.FindAllRecords("companies")
+			if findErr != nil {
+				return e.InternalServerError("Could not search wholesale accounts", findErr)
+			}
+			for _, company := range companies {
+				if normalizeCompanyName(company.GetString("name")) == normalizeCompanyName(details.CompanyName) {
+					suggested = append(suggested, map[string]string{"id": company.Id, "name": company.GetString("name")})
+				}
+			}
+		}
+
+		return e.JSON(http.StatusOK, map[string]any{"customer": details, "suggested_accounts": suggested})
+	}
+}
+
+func resolveCompany(app core.App, selection accountSelectionBody) (*core.Record, error) {
+	if err := validateAccountSelection(selection.CompanyID, selection.NewCompanyName); err != nil {
+		return nil, err
+	}
+	if selection.CompanyID != "" {
+		return app.FindRecordById("companies", selection.CompanyID)
+	}
+
+	name := strings.TrimSpace(selection.NewCompanyName)
+	companies, err := app.FindAllRecords("companies")
+	if err != nil {
+		return nil, err
+	}
+	for _, company := range companies {
+		if normalizeCompanyName(company.GetString("name")) == normalizeCompanyName(name) {
+			return nil, fmt.Errorf("an account named %q already exists; select it instead", company.GetString("name"))
+		}
+	}
+
+	collection, err := app.FindCollectionByNameOrId("companies")
+	if err != nil {
+		return nil, err
+	}
+	company := core.NewRecord(collection)
+	company.Set("name", name)
+	if err := app.Save(company); err != nil {
+		return nil, err
+	}
+	return company, nil
+}
+
+func assignCustomerCompany(app core.App, customer *core.Record, companyID string) error {
+	wasUnassigned := customer.GetString("company") == ""
+	customer.Set("company", companyID)
+	if err := app.Save(customer); err != nil {
+		return err
+	}
+	if !wasUnassigned {
+		return nil
+	}
+
+	// First assignment reconciles only unassigned history. Reassignments never
+	// move historical records between accounts.
+	for _, collectionName := range []string{"orders", "scheduledOrders"} {
+		records, err := app.FindAllRecords(collectionName)
+		if err != nil {
+			return err
+		}
+		for _, record := range records {
+			if record.GetString("customer") == customer.Id && record.GetString("company") == "" {
+				record.Set("company", companyID)
+				if err := app.Save(record); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func handleAssignCustomerAccount() func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "users" {
+			return e.ForbiddenError("Only staff can assign wholesale accounts", nil)
+		}
+		var body accountSelectionBody
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Invalid request body", err)
+		}
+		company, err := resolveCompany(e.App, body)
+		if err != nil {
+			return e.BadRequestError(err.Error(), err)
+		}
+		customer, err := e.App.FindRecordById("customers", e.Request.PathValue("id"))
+		if err != nil {
+			return e.NotFoundError("Customer not found", err)
+		}
+		if err := assignCustomerCompany(e.App, customer, company.Id); err != nil {
+			return e.InternalServerError("Could not assign wholesale account", err)
+		}
+		_ = e.App.ExpandRecord(customer, []string{"company"}, nil)
+		customer.IgnoreEmailVisibility(true)
+		return e.JSON(http.StatusOK, map[string]any{"customer": customer})
+	}
 }
 
 func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
@@ -480,75 +721,52 @@ func handleInviteCustomer(sq *square.Client) func(*core.RequestEvent) error {
 		if err := e.BindBody(&body); err != nil {
 			return e.BadRequestError("Invalid request body", err)
 		}
+		body.Email = strings.TrimSpace(body.Email)
 		if body.Email == "" {
 			return e.BadRequestError("email is required", nil)
 		}
+		if err := validateAccountSelection(body.CompanyID, body.NewCompanyName); err != nil {
+			return e.BadRequestError(err.Error(), err)
+		}
 
-		// Look up the customer in Square by email.
-		squareCustomer, err := sq.SearchCustomerByEmail(e.Request.Context(), body.Email)
+		squareCustomer, err := findSquareCustomer(sq, e, body.Email)
 		if err != nil {
-			return e.InternalServerError("Could not search Square for customer", err)
+			return err
 		}
-		if squareCustomer == nil {
-			return e.BadRequestError("This email isn't registered in Square. Please add them as a customer in Square first, then invite them here.", nil)
-		}
-
-		// Check if a PocketBase customer account already exists for this email.
-		existing, _ := e.App.FindAuthRecordByEmail("customers", body.Email)
-		if existing != nil {
+		if existing, _ := e.App.FindAuthRecordByEmail("customers", body.Email); existing != nil {
 			return e.BadRequestError("A customer account already exists for this email", nil)
 		}
+		company, err := resolveCompany(e.App, body.accountSelectionBody)
+		if err != nil {
+			return e.BadRequestError(err.Error(), err)
+		}
 
-		// Create the PocketBase customer record.
 		col, err := e.App.FindCollectionByNameOrId("customers")
 		if err != nil {
 			return e.InternalServerError("customers collection not found", err)
 		}
-
-		givenName := ""
-		if squareCustomer.GivenName != nil {
-			givenName = *squareCustomer.GivenName
-		}
-		familyName := ""
-		if squareCustomer.FamilyName != nil {
-			familyName = *squareCustomer.FamilyName
-		}
-		name := givenName + " " + familyName
-		if name == " " {
-			name = body.Email
-		}
-
-		phoneNumber := ""
-		if squareCustomer.PhoneNumber != nil {
-			phoneNumber = *squareCustomer.PhoneNumber
-		}
-		squareID := ""
-		if squareCustomer.ID != nil {
-			squareID = *squareCustomer.ID
-		}
-
+		details := customerDetails(squareCustomer, body.Email)
 		record := core.NewRecord(col)
 		record.SetEmail(body.Email)
-		record.Set("name", name)
-		record.Set("phone", phoneNumber)
-		record.Set("squareCustomerId", squareID)
-		// Set a random password even though customer password auth is disabled.
+		record.Set("name", details.Name)
+		record.Set("phone", details.Phone)
+		record.Set("squareCustomerId", details.ID)
+		record.Set("company", company.Id)
 		record.SetPassword(core.GenerateDefaultRandomId() + core.GenerateDefaultRandomId())
 
 		if err := e.App.Save(record); err != nil {
 			return e.InternalServerError("Could not create customer account", err)
 		}
-
 		if err := sendCustomerWelcomeEmail(e.App, record); err != nil {
-			// Account was created; log but don't fail.
 			e.App.Logger().Error("invite: failed to send welcome email",
 				"customer_id", record.Id, "email", body.Email, "error", err)
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{
-			"id":    record.Id,
-			"email": body.Email,
-			"name":  name,
+			"id": record.Id, "email": body.Email, "name": details.Name,
+			"phone": details.Phone, "squareCustomerId": details.ID,
+			"company": company.Id,
+			"expand":  map[string]any{"company": company},
 		})
 	}
 }

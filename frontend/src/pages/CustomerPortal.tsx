@@ -229,7 +229,7 @@ export default function CustomerPortal() {
           className={tab === "orders" ? "active" : ""}
           onClick={() => setTab("orders")}
         >
-          My Orders
+          Account Orders
         </button>
         <button
           className={tab === "scheduled" ? "active" : ""}
@@ -397,7 +397,7 @@ export default function CustomerPortal() {
         {/* ORDERS */}
         {tab === "orders" && !loading && (
           <div>
-            <h2>My Orders</h2>
+            <h2>Account Orders</h2>
             {orders.length === 0 ? (
               <p className="muted">No orders yet.</p>
             ) : (
@@ -406,6 +406,7 @@ export default function CustomerPortal() {
                   <tr>
                     <th>Order #</th>
                     <th>Date</th>
+                    <th>Submitted By</th>
                     <th>Items</th>
                     <th>Status</th>
                     <th>Invoice</th>
@@ -423,6 +424,7 @@ export default function CustomerPortal() {
                       >
                         <td className="mono">{o.id.slice(0, 8)}</td>
                         <td>{formatDate(o.created)}</td>
+                        <td>{o.submittedBy?.name || "Unknown"}</td>
                         <td>{o.lineItems.length} item(s)</td>
                         <td>
                           <span className={`status-badge status-${o.status}`}>
@@ -447,7 +449,7 @@ export default function CustomerPortal() {
                       </tr>
                       {expandedOrder === o.id && (
                         <tr key={`${o.id}-detail`} className="order-detail-row">
-                          <td colSpan={5}>
+                          <td colSpan={6}>
                             <div className="order-detail">
                               <ul className="order-detail-items">
                                 {o.lineItems.map((li, i) => (
@@ -482,10 +484,10 @@ export default function CustomerPortal() {
         {/* SCHEDULED ORDERS */}
         {tab === "scheduled" && !loading && (
           <div>
-            <h2>Scheduled Orders</h2>
+            <h2>Account Schedules</h2>
             <p className="muted schedule-info">
-              Scheduled orders are placed automatically on the next due date.
-              Your first order is placed immediately when you create a schedule.
+              Account members share schedule visibility. Scheduled orders run automatically;
+              only schedule creator can cancel one.
             </p>
             {scheduledOrders.length === 0 ? (
               <p className="muted">
@@ -503,6 +505,7 @@ export default function CustomerPortal() {
                   <tr>
                     <th>Schedule #</th>
                     <th>Created</th>
+                    <th>Submitted By</th>
                     <th>Items</th>
                     <th>Frequency</th>
                     <th>Next Order</th>
@@ -514,6 +517,7 @@ export default function CustomerPortal() {
                     <tr key={s.id}>
                       <td className="mono">{s.id.slice(0, 8)}</td>
                       <td>{formatDate(s.created)}</td>
+                      <td>{s.submittedBy?.name || "Unknown"}</td>
                       <td>{s.lineItems.length} item(s)</td>
                       <td>
                         <span className="frequency-badge">
@@ -522,13 +526,17 @@ export default function CustomerPortal() {
                       </td>
                       <td>{formatDate(s.next_run_at)}</td>
                       <td>
-                        <button
-                          className="btn-cancel"
-                          onClick={() => handleCancel(s.id)}
-                          disabled={cancelling === s.id}
-                        >
-                          {cancelling === s.id ? "Cancelling…" : "Cancel"}
-                        </button>
+                        {s.customer === user?.id ? (
+                          <button
+                            className="btn-cancel"
+                            onClick={() => handleCancel(s.id)}
+                            disabled={cancelling === s.id}
+                          >
+                            {cancelling === s.id ? "Cancelling…" : "Cancel"}
+                          </button>
+                        ) : (
+                          <span className="muted">Creator only</span>
+                        )}
                       </td>
                     </tr>
                   ))}

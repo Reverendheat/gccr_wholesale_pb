@@ -118,6 +118,11 @@
 .modal-desc { font-size: 0.875rem; color: var(--text-muted); margin: 0 0 1.25rem; }
 .invite-form { display: flex; flex-direction: column; gap: 1rem; }
 .invite-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem; font-weight: 500; }
+.invite-form input, .invite-form select { padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.account-cell { min-width: 210px; }
+.account-cell select { max-width: 210px; }
+.account-reconcile { display: block; margin-top: 0.25rem; padding: 0; border: 0; background: transparent; color: var(--primary); font-size: 0.78rem; cursor: pointer; }
+.account-reconcile:disabled { opacity: 0.55; cursor: default; }
 .modal-error { margin: 0; font-size: 0.85rem; }
 .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.25rem; }
 .btn-secondary {

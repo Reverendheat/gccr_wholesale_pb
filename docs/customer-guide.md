@@ -7,7 +7,7 @@ GCCR Wholesale accounts are invitation-only.
 Before invitation:
 
 1. Your business/contact must exist as customer in Ground Control Roasters Square account.
-2. GCCR staff invites email address stored in Square.
+2. GCCR staff links your login to correct wholesale account and invites email address stored in Square.
 3. You receive welcome email with GCCR Wholesale link.
 
 If welcome email does not arrive, contact GCCR staff. If account was created, you can still open portal directly and request one-time sign-in code.
@@ -53,9 +53,9 @@ Catalog is shared among customers; it is not customized by company account. Cont
 
 Order is created in GCCR Wholesale and Square immediately. New order starts as `pending`.
 
-Open **My Orders** to view:
+Open **Account Orders** to view orders submitted by you and other members of your wholesale account:
 
-- Order number and date
+- Order number, date, and submitter
 - Item count and details
 - Notes
 - Current status
@@ -76,11 +76,11 @@ Select order row to expand item details.
 
 First order is placed immediately. Future orders are created automatically on shown next-order date.
 
-Open **Scheduled Orders** to see active schedules, frequencies, and next dates.
+Open **Account Schedules** to see active schedules, creators, frequencies, and next dates for your wholesale account.
 
 ### Cancel recurring order
 
-Select **Cancel** next to active schedule.
+Only schedule creator can select **Cancel**. Other account members have read-only visibility.
 
 Cancellation stops future scheduled orders. It does not cancel:
 
@@ -107,7 +107,7 @@ Contact GCCR staff about existing order changes or cancellations.
 When staff sends invoice:
 
 1. Square emails invoice/payment request.
-2. **My Orders** shows **View invoice** link.
+2. **Account Orders** shows **View invoice** link to all members of wholesale account.
 3. Open link and follow Square payment instructions.
 4. After payment, status updates to `paid` when Square webhook is processed.
 
