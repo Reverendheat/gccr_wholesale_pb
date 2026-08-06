@@ -18,8 +18,17 @@ gccr_wholesale/
   internal/square/        # Square API client
   pb_migrations/          # PocketBase schema migrations
   frontend/               # React app (Vite)
+  docs/                   # Deployment and role guides
   .env.example            # Backend env vars
 ```
+
+## Documentation
+
+- [Deployment and operations](docs/deployment.md)
+- [Administrator onboarding](docs/admin-onboarding.md)
+- [Staff onboarding](docs/staff-onboarding.md)
+- [Customer guide](docs/customer-guide.md)
+- [Documentation index and role overview](docs/README.md)
 
 ## Getting Started
 
