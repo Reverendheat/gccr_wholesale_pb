@@ -12,6 +12,7 @@ import {
   type Order,
   type ScheduledOrder,
   type ScheduleFrequency,
+  type Fulfillment,
 } from "../lib/api";
 import "./CustomerPortal.css";
 
@@ -67,6 +68,18 @@ export default function CustomerPortal() {
   const [scheduledOrders, setScheduledOrders] = useState<ScheduledOrder[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
+  const [fulfillment, setFulfillment] = useState<Fulfillment>({
+    method: "pickup",
+    recipient_name: String(user?.name ?? ""),
+    recipient_phone: String(user?.phone ?? ""),
+    address_line_1: "",
+    address_line_2: "",
+    city: "",
+    state: "",
+    postal_code: "",
+    country: "US",
+    instructions: "",
+  });
   const [tab, setTab] = useState<"catalog" | "orders" | "scheduled">("catalog");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -132,12 +145,42 @@ export default function CustomerPortal() {
       quantity: c.quantity,
     }));
 
+  function updateFulfillment(field: keyof Fulfillment, value: string) {
+    setFulfillment((current) => ({ ...current, [field]: value }));
+  }
+
+  function validateFulfillment(): string | null {
+    if (fulfillment.method === "pickup") return null;
+    if (
+      !fulfillment.recipient_name?.trim() ||
+      !fulfillment.recipient_phone?.trim() ||
+      !fulfillment.address_line_1?.trim() ||
+      !fulfillment.city?.trim() ||
+      !fulfillment.state?.trim() ||
+      !fulfillment.postal_code?.trim()
+    ) {
+      return "Complete all required delivery fields.";
+    }
+    if (!/^[A-Za-z]{2}$/.test(fulfillment.state.trim())) {
+      return "Use a two-letter state code.";
+    }
+    if (!/^\d{5}(-\d{4})?$/.test(fulfillment.postal_code.trim())) {
+      return "Use a valid US ZIP code.";
+    }
+    return null;
+  }
+
   async function handleSubmitOrder() {
     if (cart.length === 0) return;
+    const fulfillmentError = validateFulfillment();
+    if (fulfillmentError) {
+      setError(fulfillmentError);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const order = await submitOrder(lineItemsFromCart(), notes);
+      const order = await submitOrder(lineItemsFromCart(), notes, fulfillment);
       setOrders((prev) => [order, ...prev]);
       setCart([]);
       setNotes("");
@@ -153,6 +196,11 @@ export default function CustomerPortal() {
 
   async function handleSubmitScheduledOrder() {
     if (cart.length === 0) return;
+    const fulfillmentError = validateFulfillment();
+    if (fulfillmentError) {
+      setError(fulfillmentError);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -160,6 +208,7 @@ export default function CustomerPortal() {
         lineItemsFromCart(),
         notes,
         frequency,
+        fulfillment,
       );
       setOrders((prev) => [order, ...prev]);
       setScheduledOrders((prev) => [scheduledOrder, ...prev]);
@@ -324,9 +373,107 @@ export default function CustomerPortal() {
                     </div>
                   )}
 
+                  <section className="fulfillment-picker">
+                    <h3>Fulfillment</h3>
+                    <div className="fulfillment-methods">
+                      <label>
+                        <input
+                          type="radio"
+                          name="fulfillment-method"
+                          checked={fulfillment.method === "pickup"}
+                          onChange={() => updateFulfillment("method", "pickup")}
+                        />
+                        Pickup
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name="fulfillment-method"
+                          checked={fulfillment.method === "delivery"}
+                          onChange={() => updateFulfillment("method", "delivery")}
+                        />
+                        Delivery
+                      </label>
+                    </div>
+
+                    {fulfillment.method === "delivery" && (
+                      <div className="delivery-fields">
+                        <label>
+                          Recipient name *
+                          <input
+                            value={fulfillment.recipient_name ?? ""}
+                            onChange={(e) => updateFulfillment("recipient_name", e.target.value)}
+                            autoComplete="name"
+                          />
+                        </label>
+                        <label>
+                          Recipient phone *
+                          <input
+                            type="tel"
+                            value={fulfillment.recipient_phone ?? ""}
+                            onChange={(e) => updateFulfillment("recipient_phone", e.target.value)}
+                            autoComplete="tel"
+                          />
+                        </label>
+                        <label>
+                          Address line 1 *
+                          <input
+                            value={fulfillment.address_line_1 ?? ""}
+                            onChange={(e) => updateFulfillment("address_line_1", e.target.value)}
+                            autoComplete="address-line1"
+                          />
+                        </label>
+                        <label>
+                          Address line 2
+                          <input
+                            value={fulfillment.address_line_2 ?? ""}
+                            onChange={(e) => updateFulfillment("address_line_2", e.target.value)}
+                            autoComplete="address-line2"
+                          />
+                        </label>
+                        <label>
+                          City *
+                          <input
+                            value={fulfillment.city ?? ""}
+                            onChange={(e) => updateFulfillment("city", e.target.value)}
+                            autoComplete="address-level2"
+                          />
+                        </label>
+                        <div className="delivery-region-row">
+                          <label>
+                            State *
+                            <input
+                              value={fulfillment.state ?? ""}
+                              onChange={(e) => updateFulfillment("state", e.target.value.toUpperCase())}
+                              maxLength={2}
+                              autoComplete="address-level1"
+                            />
+                          </label>
+                          <label>
+                            ZIP code *
+                            <input
+                              value={fulfillment.postal_code ?? ""}
+                              onChange={(e) => updateFulfillment("postal_code", e.target.value)}
+                              autoComplete="postal-code"
+                            />
+                          </label>
+                        </div>
+                        <label>
+                          Delivery instructions
+                          <textarea
+                            value={fulfillment.instructions ?? ""}
+                            onChange={(e) => updateFulfillment("instructions", e.target.value)}
+                            rows={2}
+                          />
+                        </label>
+                        <p className="delivery-country">United States addresses only</p>
+                      </div>
+                    )}
+                  </section>
+
                   <textarea
                     className="cart-notes"
-                    placeholder="Delivery notes or special requests…"
+                    placeholder="Order notes or special requests…"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
@@ -452,6 +599,16 @@ export default function CustomerPortal() {
                           <td colSpan={6}>
                             <div className="order-detail">
                               <ul className="order-detail-items">
+                                <li>
+                                  <strong>Fulfillment:</strong>{" "}
+                                  {o.fulfillment?.method === "delivery" ? "Delivery" : "Pickup"}
+                                </li>
+                                {o.fulfillment?.method === "delivery" && o.fulfillment.address_line_1 && (
+                                  <li>
+                                    {o.fulfillment.address_line_1}
+                                    {o.fulfillment.address_line_2 ? `, ${o.fulfillment.address_line_2}` : ""}, {o.fulfillment.city}, {o.fulfillment.state} {o.fulfillment.postal_code}
+                                  </li>
+                                )}
                                 {o.lineItems.map((li, i) => (
                                   <li key={i}>
                                     <span className="order-detail-name">
@@ -508,6 +665,7 @@ export default function CustomerPortal() {
                     <th>Submitted By</th>
                     <th>Items</th>
                     <th>Frequency</th>
+                    <th>Fulfillment</th>
                     <th>Next Order</th>
                     <th></th>
                   </tr>
@@ -524,6 +682,7 @@ export default function CustomerPortal() {
                           {FREQUENCY_LABELS[s.frequency]}
                         </span>
                       </td>
+                      <td>{s.fulfillment?.method === "delivery" ? "Delivery" : "Pickup"}</td>
                       <td>{formatDate(s.next_run_at)}</td>
                       <td>
                         {s.customer === user?.id ? (

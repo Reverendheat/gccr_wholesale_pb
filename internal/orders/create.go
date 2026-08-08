@@ -29,6 +29,7 @@ func Create(
 	sq *square.Client,
 	locationID, customerID, companyID, squareCustomerID string,
 	items []LineItem,
+	fulfillment Fulfillment,
 	notes, idempotencyKey string,
 ) (*core.Record, error) {
 	lineItemsSnapshot := make([]map[string]any, len(items))
@@ -55,6 +56,7 @@ func Create(
 	pbOrder.Set("customer", customerID)
 	pbOrder.Set("company", companyID)
 	pbOrder.Set("status", "pending")
+	pbOrder.Set("fulfillment", fulfillment)
 	pbOrder.Set("notes", notes)
 	pbOrder.Set("lineItems", lineItemsSnapshot)
 

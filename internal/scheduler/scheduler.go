@@ -83,6 +83,17 @@ func processOne(app core.App, sq *square.Client, locationID string, sr *core.Rec
 		})
 	}
 
+	fulfillment := orders.Fulfillment{}
+	if sr.GetString("fulfillment") != "" {
+		if err := sr.UnmarshalJSONField("fulfillment", &fulfillment); err != nil {
+			return fmt.Errorf("unmarshal fulfillment: %w", err)
+		}
+	}
+	fulfillment, err = orders.NormalizeFulfillment(fulfillment)
+	if err != nil {
+		return fmt.Errorf("validate fulfillment: %w", err)
+	}
+
 	// idempotency key embeds both the scheduled order ID and the current date
 	// so re-runs on the same day are safe.
 	idempotencyKey := fmt.Sprintf("sched-%s-%s", sr.Id, time.Now().UTC().Format("20060102"))
@@ -90,7 +101,7 @@ func processOne(app core.App, sq *square.Client, locationID string, sr *core.Rec
 	pbOrder, err := orders.Create(
 		ctx, app, sq,
 		locationID, sr.GetString("customer"), sr.GetString("company"), squareCustomerID,
-		items, sr.GetString("notes"), idempotencyKey,
+		items, fulfillment, sr.GetString("notes"), idempotencyKey,
 	)
 	if err != nil {
 		return fmt.Errorf("create order: %w", err)
