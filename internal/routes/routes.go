@@ -79,8 +79,9 @@ type orderLineItemInput struct {
 }
 
 type createOrderBody struct {
-	LineItems []orderLineItemInput `json:"lineItems"`
-	Notes     string               `json:"notes"`
+	LineItems   []orderLineItemInput `json:"lineItems"`
+	Notes       string               `json:"notes"`
+	Fulfillment orders.Fulfillment   `json:"fulfillment"`
 }
 
 func validateLineItems(items []orderLineItemInput) error {
@@ -173,6 +174,10 @@ func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestE
 		if err := validateLineItems(body.LineItems); err != nil {
 			return e.BadRequestError(err.Error(), nil)
 		}
+		fulfillment, err := orders.NormalizeFulfillment(body.Fulfillment)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 
 		squareCustomerID := e.Auth.GetString("squareCustomerId")
 		if squareCustomerID == "" {
@@ -182,7 +187,7 @@ func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestE
 		pbOrder, err := orders.Create(
 			e.Request.Context(), e.App, sq,
 			locationID, e.Auth.Id, e.Auth.GetString("company"), squareCustomerID,
-			toOrderLineItems(body.LineItems), body.Notes,
+			toOrderLineItems(body.LineItems), fulfillment, body.Notes,
 			fmt.Sprintf("order-%s", e.Auth.Id+time.Now().UTC().Format("20060102150405")),
 		)
 		if err != nil {
@@ -299,9 +304,10 @@ var validFrequencies = map[string]bool{
 }
 
 type createScheduledOrderBody struct {
-	LineItems []orderLineItemInput `json:"lineItems"`
-	Notes     string               `json:"notes"`
-	Frequency string               `json:"frequency"`
+	LineItems   []orderLineItemInput `json:"lineItems"`
+	Notes       string               `json:"notes"`
+	Frequency   string               `json:"frequency"`
+	Fulfillment orders.Fulfillment   `json:"fulfillment"`
 }
 
 func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core.RequestEvent) error {
@@ -320,6 +326,10 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		if !validFrequencies[body.Frequency] {
 			return e.BadRequestError("frequency must be weekly, biweekly, monthly, or quarterly", nil)
 		}
+		fulfillment, err := orders.NormalizeFulfillment(body.Fulfillment)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 
 		squareCustomerID := e.Auth.GetString("squareCustomerId")
 		if squareCustomerID == "" {
@@ -332,7 +342,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		firstOrder, err := orders.Create(
 			e.Request.Context(), e.App, sq,
 			locationID, e.Auth.Id, e.Auth.GetString("company"), squareCustomerID,
-			lineItems, body.Notes,
+			lineItems, fulfillment, body.Notes,
 			fmt.Sprintf("sched-first-%s-%s", e.Auth.Id, time.Now().UTC().Format("20060102150405")),
 		)
 		if err != nil {
@@ -361,6 +371,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		sr.Set("company", e.Auth.GetString("company"))
 		sr.Set("frequency", body.Frequency)
 		sr.Set("lineItems", lineItemsSnapshot)
+		sr.Set("fulfillment", fulfillment)
 		sr.Set("notes", body.Notes)
 		sr.Set("next_run_at", nextRunAt.Format("2006-01-02 15:04:05.000Z"))
 		sr.Set("active", true)

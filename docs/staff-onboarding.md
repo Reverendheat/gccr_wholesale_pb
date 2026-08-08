@@ -72,6 +72,7 @@ Open **Orders**, then select row to view details:
 - Customer information
 - Local and Square order IDs
 - Item variations and quantities
+- Pickup or delivery details, including snapshotted address and instructions
 - Notes
 - Current status
 - Invoice information
@@ -100,7 +101,7 @@ Invoice can be sent when order:
 
 From order detail:
 
-1. Review customer, items, notes, and status.
+1. Review customer, fulfillment details, items, notes, and status.
 2. Select **Send invoice**.
 3. Application creates Square invoice due 30 days from current date.
 4. Square emails payment request to customer.

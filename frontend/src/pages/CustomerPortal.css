@@ -113,6 +113,23 @@
   font-family: inherit; margin-bottom: 1rem; color: var(--text);
 }
 .cart-notes:focus { outline: none; border-color: var(--primary); }
+.fulfillment-picker {
+  margin-bottom: 1rem; padding: 0.85rem; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.fulfillment-picker h3 { margin: 0 0 0.65rem; font-size: 0.9rem; }
+.fulfillment-methods { display: flex; gap: 1rem; margin-bottom: 0.75rem; }
+.fulfillment-methods label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.875rem; cursor: pointer; }
+.fulfillment-methods input { accent-color: var(--primary); }
+.delivery-fields { display: flex; flex-direction: column; gap: 0.65rem; }
+.delivery-fields label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+.delivery-fields input, .delivery-fields textarea {
+  width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit;
+}
+.delivery-fields input:focus, .delivery-fields textarea:focus { outline: none; border-color: var(--primary); }
+.delivery-region-row { display: grid; grid-template-columns: 90px 1fr; gap: 0.65rem; }
+.delivery-country { margin: 0; font-size: 0.75rem; color: var(--text-muted); }
 .cart-submit { width: 100%; }
 .cart-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 

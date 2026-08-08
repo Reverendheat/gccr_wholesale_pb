@@ -118,6 +118,21 @@ export interface SubmittedBy {
   name: string;
 }
 
+export type FulfillmentMethod = "pickup" | "delivery";
+
+export interface Fulfillment {
+  method: FulfillmentMethod;
+  recipient_name?: string;
+  recipient_phone?: string;
+  address_line_1?: string;
+  address_line_2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: "US";
+  instructions?: string;
+}
+
 export interface Order {
   id: string;
   customer: string;
@@ -125,6 +140,7 @@ export interface Order {
   submittedBy?: SubmittedBy;
   status: string;
   notes: string;
+  fulfillment: Fulfillment;
   lineItems: LineItemInput[];
   squareOrderId: string;
   squareInvoiceId: string;
@@ -157,6 +173,7 @@ export interface ScheduledOrder {
   frequency: ScheduleFrequency;
   lineItems: LineItemInput[];
   notes: string;
+  fulfillment: Fulfillment;
   next_run_at: string;
   active: boolean;
   created: string;
@@ -171,12 +188,13 @@ export async function fetchWholesaleCatalog(): Promise<CatalogItem[]> {
 
 export async function submitOrder(
   lineItems: LineItemInput[],
-  notes: string
+  notes: string,
+  fulfillment: Fulfillment,
 ): Promise<Order> {
   const res = await fetch(`${BASE}/orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ lineItems: lineItems, notes }),
+    body: JSON.stringify({ lineItems: lineItems, notes, fulfillment }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -196,11 +214,12 @@ export async function submitScheduledOrder(
   lineItems: LineItemInput[],
   notes: string,
   frequency: ScheduleFrequency,
+  fulfillment: Fulfillment,
 ): Promise<{ order: Order; scheduledOrder: ScheduledOrder }> {
   const res = await fetch(`${BASE}/scheduled-orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ lineItems: lineItems, notes, frequency }),
+    body: JSON.stringify({ lineItems: lineItems, notes, frequency, fulfillment }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

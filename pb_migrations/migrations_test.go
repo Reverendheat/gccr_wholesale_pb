@@ -64,8 +64,10 @@ func TestAccountAccessMigrationAppliesAccountRelationsAndRules(t *testing.T) {
 	}
 
 	runner := core.NewMigrationsRunner(app, core.AppMigrations)
-	if _, err := runner.Down(1); err != nil {
-		t.Fatalf("rollback account access migration: %v", err)
+	accountAccessPosition := migrationPositions()["9c_add_account_access.go"]
+	rollbackCount := len(core.AppMigrations.Items()) - accountAccessPosition
+	if _, err := runner.Down(rollbackCount); err != nil {
+		t.Fatalf("rollback through account access migration: %v", err)
 	}
 	for _, collectionName := range []string{"orders", "scheduledOrders"} {
 		collection, err := app.FindCollectionByNameOrId(collectionName)
@@ -74,6 +76,31 @@ func TestAccountAccessMigrationAppliesAccountRelationsAndRules(t *testing.T) {
 		}
 		if collection.Fields.GetByName("company") != nil {
 			t.Fatalf("%s.company relation remains after rollback", collectionName)
+		}
+	}
+}
+
+func TestFulfillmentMigrationAddsOrderAndScheduleSnapshots(t *testing.T) {
+	app := pocketbase.NewWithConfig(pocketbase.Config{
+		DefaultDataDir:  t.TempDir(),
+		HideStartBanner: true,
+	})
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+	defer app.ResetBootstrapState()
+
+	if err := app.RunAppMigrations(); err != nil {
+		t.Fatalf("run app migrations: %v", err)
+	}
+
+	for _, collectionName := range []string{"orders", "scheduledOrders"} {
+		collection, err := app.FindCollectionByNameOrId(collectionName)
+		if err != nil {
+			t.Fatalf("find %s: %v", collectionName, err)
+		}
+		if collection.Fields.GetByName("fulfillment") == nil {
+			t.Fatalf("%s.fulfillment snapshot missing", collectionName)
 		}
 	}
 }

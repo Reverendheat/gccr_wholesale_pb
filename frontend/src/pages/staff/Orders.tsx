@@ -141,6 +141,28 @@ function OrderDrawer({
             </div>
           </section>
 
+          {/* Fulfillment */}
+          <section className="drawer-section">
+            <h4 className="drawer-section-title">Fulfillment</h4>
+            {order.fulfillment?.method === "delivery" ? (
+              <div className="fulfillment-detail">
+                <strong>Delivery</strong>
+                <span>{order.fulfillment.recipient_name}</span>
+                <span>{order.fulfillment.recipient_phone}</span>
+                <address>
+                  {order.fulfillment.address_line_1}<br />
+                  {order.fulfillment.address_line_2 && <>{order.fulfillment.address_line_2}<br /></>}
+                  {order.fulfillment.city}, {order.fulfillment.state} {order.fulfillment.postal_code}
+                </address>
+                {order.fulfillment.instructions && (
+                  <p><strong>Instructions:</strong> {order.fulfillment.instructions}</p>
+                )}
+              </div>
+            ) : (
+              <p className="drawer-notes">Pickup</p>
+            )}
+          </section>
+
           {/* Line Items */}
           <section className="drawer-section">
             <h4 className="drawer-section-title">Line Items</h4>
