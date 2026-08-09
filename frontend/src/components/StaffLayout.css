@@ -82,7 +82,73 @@
 /* Main content */
 .staff-main {
   flex: 1;
+  min-width: 0;
   padding: 2rem;
   background: var(--bg);
   overflow-y: auto;
+}
+
+@media (max-width: 700px) {
+  .staff-shell {
+    flex-direction: column;
+  }
+
+  .staff-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: max(0.5rem, env(safe-area-inset-top)) 0.75rem 0.5rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-logo {
+    padding: 0;
+  }
+
+  .sidebar-logo-img {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+  }
+
+  .sidebar-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.35rem;
+  }
+
+  .sidebar-nav a {
+    padding: 0.5rem 0.35rem;
+    text-align: center;
+    font-size: 0.85rem;
+  }
+
+  .sidebar-footer {
+    grid-column: 3;
+    grid-row: 1;
+    padding: 0;
+  }
+
+  .sidebar-user {
+    display: none;
+  }
+
+  .sidebar-logout {
+    padding: 0.4rem 0.65rem;
+    white-space: nowrap;
+  }
+
+  .staff-main {
+    width: 100%;
+    padding: 1rem;
+    overflow: visible;
+  }
 }

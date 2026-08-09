@@ -257,9 +257,9 @@ export default function Customers() {
           <tbody>
             {customers.map((customer) => (
               <tr key={customer.id}>
-                <td>{customer.name || "—"}</td>
-                <td>{customer.email}</td>
-                <td className="account-cell">
+                <td data-label="Name">{customer.name || "—"}</td>
+                <td data-label="Email">{customer.email}</td>
+                <td className="account-cell" data-label="Wholesale Account">
                   <select
                     value={customer.company || ""}
                     onChange={(e) => handleAccountChange(customer, e.target.value)}
@@ -283,11 +283,11 @@ export default function Customers() {
                     </button>
                   )}
                 </td>
-                <td>{customer.phone || "—"}</td>
-                <td className="mono">
+                <td data-label="Phone">{customer.phone || "—"}</td>
+                <td className="mono" data-label="Square ID">
                   {customer.squareCustomerId ? `${customer.squareCustomerId.slice(0, 12)}…` : "—"}
                 </td>
-                <td>{formatDate(customer.created)}</td>
+                <td data-label="Registered">{formatDate(customer.created)}</td>
               </tr>
             ))}
           </tbody>

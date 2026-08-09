@@ -177,9 +177,9 @@ function OrderDrawer({
               <tbody>
                 {order.lineItems.map((li, i) => (
                   <tr key={i}>
-                    <td className="mono">{li.variation_id}</td>
-                    <td>{li.quantity}</td>
-                    <td>{li.note || "—"}</td>
+                    <td className="mono" data-label="Variation">{li.variation_id}</td>
+                    <td data-label="Quantity">{li.quantity}</td>
+                    <td data-label="Note">{li.note || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -311,22 +311,22 @@ export default function Orders() {
                   onClick={() => setSelected(o)}
                   className={selected?.id === o.id ? "row-selected" : ""}
                 >
-                  <td className="mono">{o.id.slice(0, 8)}</td>
-                  <td>{formatDate(o.created)}</td>
-                  <td>
+                  <td className="mono" data-label="Order #">{o.id.slice(0, 8)}</td>
+                  <td data-label="Date">{formatDate(o.created)}</td>
+                  <td data-label="Customer">
                     {customer ? (
                       customer.name
                     ) : (
                       <span className="mono">{o.customer.slice(0, 8)}</span>
                     )}
                   </td>
-                  <td>{o.lineItems.length} item(s)</td>
-                  <td className="mono">
+                  <td data-label="Items">{o.lineItems.length} item(s)</td>
+                  <td className="mono" data-label="Square Order">
                     {o.squareOrderId
                       ? o.squareOrderId.slice(0, 10) + "…"
                       : "—"}
                   </td>
-                  <td>
+                  <td data-label="Status">
                     <span className={`status-badge status-${o.status}`}>
                       {o.status}
                     </span>
