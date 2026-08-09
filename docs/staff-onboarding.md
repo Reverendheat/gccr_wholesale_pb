@@ -39,6 +39,8 @@ Staff portal contains:
 - **Invoices** — orders with Square invoices
 - **Customers** — customer list and invitations
 
+On phones, navigation moves to top of screen and table rows become labeled cards. Tap an order card to open full-screen order details.
+
 All staff records currently have same permissions.
 
 ## Invite a customer

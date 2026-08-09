@@ -46,16 +46,16 @@ export default function Invoices() {
           <tbody>
             {invoiced.map((o) => (
               <tr key={o.id}>
-                <td className="mono">{o.squareInvoiceId}</td>
-                <td className="mono">{o.id.slice(0, 8)}</td>
-                <td>{formatDate(o.created)}</td>
-                <td>{o.expand?.customer?.name ?? <span className="mono">{o.customer.slice(0, 8)}</span>}</td>
-                <td>
+                <td className="mono" data-label="Square Invoice">{o.squareInvoiceId}</td>
+                <td className="mono" data-label="Order #">{o.id.slice(0, 8)}</td>
+                <td data-label="Date">{formatDate(o.created)}</td>
+                <td data-label="Customer">{o.expand?.customer?.name ?? <span className="mono">{o.customer.slice(0, 8)}</span>}</td>
+                <td data-label="Status">
                   <span className={`status-badge status-${o.status}`}>
                     {o.status}
                   </span>
                 </td>
-                <td>
+                <td data-label="Invoice">
                   {o.squareInvoiceUrl ? (
                     <a
                       href={o.squareInvoiceUrl}
