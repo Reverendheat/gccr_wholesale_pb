@@ -23,6 +23,16 @@ If welcome email does not arrive, contact GCCR staff. If account was created, yo
 
 No password is needed. Each login uses one-time email code.
 
+## Add to iPhone Home Screen
+
+Ground Control Roasters shows an install prompt when opened on an iPhone or iPad browser. Select **Show me how**, then:
+
+1. Tap **Share** in browser toolbar.
+2. Select **Add to Home Screen**.
+3. Enable **Open as Web App**, then tap **Add**.
+
+Home Screen icon opens portal in standalone app window. Installed users do not see prompt again. Selecting **Not now** hides prompt for 30 days.
+
 If code does not arrive:
 
 - Confirm you selected **Customer**, not **Staff**.

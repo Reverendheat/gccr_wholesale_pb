@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:pwa": "node --test scripts/pwa.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

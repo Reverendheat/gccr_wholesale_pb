@@ -7,6 +7,7 @@ import Orders from "./pages/staff/Orders";
 import Invoices from "./pages/staff/Invoices";
 import Customers from "./pages/staff/Customers";
 import CustomerPortal from "./pages/CustomerPortal";
+import InstallPrompt from "./components/InstallPrompt";
 
 // Redirects to /login if not authenticated, or wrong role
 function RequireRole({ role, children }: { role: UserRole; children: React.ReactNode }) {
@@ -72,6 +73,7 @@ export default function App() {
     <Router>
       <AuthProvider>
         <AppRoutes />
+        <InstallPrompt />
       </AuthProvider>
     </Router>
   );
