@@ -63,7 +63,7 @@ Catalog is shared among customers; it is not customized by company account. Cont
 6. Select **Place Order**.
 7. Wait for success confirmation.
 
-Order is created in GCCR Wholesale and Square immediately. New order starts as `pending`. Delivery details are stored in GCCR Wholesale for staff fulfillment; Square order and invoice behavior is unchanged. Address checks validate required fields and US ZIP format, not real-world deliverability.
+Order is created in GCCR Wholesale with catalog pricing locked at submission. New order starts as `pending`. Square order and invoice are created later when staff sends invoice. Delivery details remain in GCCR Wholesale for fulfillment. Address checks validate required fields and US ZIP format, not real-world deliverability.
 
 Open **Account Orders** to view orders submitted by you and other members of your wholesale account:
 
@@ -87,7 +87,7 @@ Select order row to expand item details.
    - Quarterly
 4. Select schedule button.
 
-First order is placed immediately. Future orders are created automatically on shown next-order date using fulfillment details saved when schedule was created.
+First order is placed immediately. Future orders are created automatically on shown next-order date using fulfillment details saved when schedule was created. Each generated order locks wholesale catalog pricing in effect on its creation date.
 
 Open **Account Schedules** to see active schedules, creators, frequencies, and next dates for your wholesale account.
 

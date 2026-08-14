@@ -13,6 +13,11 @@ function formatDate(iso: string): string {
   return new Date(iso.replace(" ", "T")).toLocaleDateString();
 }
 
+function formatMoney(cents?: number, currency = "USD"): string {
+  if (cents == null) return "—";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
+}
+
 function availableActions(status: string): { event: OrderEvent; label: string; danger?: boolean }[] {
   switch (status) {
     case "pending":
@@ -75,7 +80,6 @@ function OrderDrawer({
   }
 
   const canSendInvoice =
-    order.squareOrderId &&
     !order.squareInvoiceId &&
     !["paid", "cancelled", "needs_review"].includes(order.status);
 
@@ -169,16 +173,18 @@ function OrderDrawer({
             <table className="drawer-items-table">
               <thead>
                 <tr>
-                  <th>Variation ID</th>
+                  <th>Item</th>
                   <th>Qty</th>
+                  <th>Unit Price</th>
                   <th>Note</th>
                 </tr>
               </thead>
               <tbody>
                 {order.lineItems.map((li, i) => (
                   <tr key={i}>
-                    <td className="mono" data-label="Variation">{li.variation_id}</td>
+                    <td data-label="Item">{li.name || li.variation_id}</td>
                     <td data-label="Quantity">{li.quantity}</td>
+                    <td data-label="Unit Price">{formatMoney(li.unit_price_cents, li.currency)}</td>
                     <td data-label="Note">{li.note || "—"}</td>
                   </tr>
                 ))}

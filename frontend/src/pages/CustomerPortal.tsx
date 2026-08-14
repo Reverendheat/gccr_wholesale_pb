@@ -612,7 +612,8 @@ export default function CustomerPortal() {
                                 {o.lineItems.map((li, i) => (
                                   <li key={i}>
                                     <span className="order-detail-name">
-                                      {variationNames[li.variation_id] ??
+                                      {li.name ??
+                                        variationNames[li.variation_id] ??
                                         li.variation_id}
                                     </span>
                                     <span className="order-detail-qty">

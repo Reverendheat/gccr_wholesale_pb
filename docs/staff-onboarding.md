@@ -82,8 +82,8 @@ Welcome-email failure is logged after account creation and may not make invitati
 Open **Orders**, then select row to view details:
 
 - Customer information
-- Local and Square order IDs
-- Item variations and quantities
+- Local order ID; Square order ID after invoicing
+- Item variations, locked submission prices, and quantities
 - Pickup or delivery details, including snapshotted address and instructions
 - Notes
 - Current status
@@ -107,20 +107,19 @@ Do not manually edit status in PocketBase. Use staff actions so workflow validat
 
 Invoice can be sent when order:
 
-- Has Square order ID
 - Does not already have Square invoice
 - Is not `paid`, `cancelled`, or `needs_review`
 
 From order detail:
 
-1. Review customer, fulfillment details, items, notes, and status.
+1. Review customer, fulfillment details, locked prices, items, notes, and status.
 2. Select **Send invoice**.
-3. Application creates Square invoice due 30 days from current date.
+3. Application creates Square order from locked local snapshot, then creates invoice due 30 days from current date.
 4. Square emails payment request to customer.
 5. Invoice link appears in order detail and **Invoices** tab.
-6. Square `invoice.payment_made` webhook changes local order status to `paid`.
+6. Square webhook updates local status after payment, cancellation, or refund.
 
-Never send second invoice directly in Square without reconciling local order record.
+Do not edit order line items directly in Square. Cancel and recreate invoice through normal workflow when correction is required. Never send second invoice directly in Square without reconciling local order record.
 
 ## Invoices tab
 

@@ -111,6 +111,9 @@ export interface LineItemInput {
   variation_id: string;
   quantity: number;
   note?: string;
+  name?: string;
+  unit_price_cents?: number;
+  currency?: string;
 }
 
 export interface SubmittedBy {

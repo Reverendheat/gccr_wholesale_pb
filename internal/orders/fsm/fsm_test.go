@@ -19,6 +19,10 @@ func TestApplyAllowedTransitions(t *testing.T) {
 		{"square payment can pull pending to paid", StatusPending, EventSquareInvoicePaid, StatusPaid},
 		{"duplicate square payment is idempotent", StatusPaid, EventSquareInvoicePaid, StatusPaid},
 		{"square payment on cancelled needs review", StatusCancelled, EventSquareInvoicePaid, StatusNeedsReview},
+		{"square cancellation cancels invoiced order", StatusInvoiced, EventSquareInvoiceCancelled, StatusCancelled},
+		{"duplicate square cancellation is idempotent", StatusCancelled, EventSquareInvoiceCancelled, StatusCancelled},
+		{"square refund after payment needs review", StatusPaid, EventSquareNeedsReview, StatusNeedsReview},
+		{"duplicate review event is idempotent", StatusNeedsReview, EventSquareNeedsReview, StatusNeedsReview},
 		{"needs review can be cancelled by staff", StatusNeedsReview, EventStaffCancel, StatusCancelled},
 	}
 
@@ -30,6 +34,29 @@ func TestApplyAllowedTransitions(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Fatalf("Apply() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEventForSquareInvoiceStatus(t *testing.T) {
+	tests := []struct {
+		status string
+		want   Event
+		ok     bool
+	}{
+		{"PAID", EventSquareInvoicePaid, true},
+		{"CANCELED", EventSquareInvoiceCancelled, true},
+		{"PARTIALLY_PAID", EventSquareNeedsReview, true},
+		{"REFUNDED", EventSquareNeedsReview, true},
+		{"FAILED", EventSquareNeedsReview, true},
+		{"UNPAID", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			got, ok := EventForSquareInvoiceStatus(tt.status)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("got (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
 			}
 		})
 	}

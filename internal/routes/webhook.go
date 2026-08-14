@@ -65,22 +65,31 @@ func handleSquareWebhook(signatureKey, notificationURL string) func(*core.Reques
 			return e.BadRequestError("Could not parse webhook payload", err)
 		}
 
-		switch event.Type {
-		case "invoice.payment_made":
-			if err := handleInvoicePaymentMade(e, event.Data.Object.Invoice.ID); err != nil {
-				log.Printf("square webhook: invoice.payment_made: %v", err)
-				// Return 200 so Square doesn't retry — we've logged the failure.
+		if workflowEvent, ok := squareInvoiceEvent(event.Type); ok {
+			if err := handleInvoiceEvent(e, event.Data.Object.Invoice.ID, workflowEvent); err != nil {
+				log.Printf("square webhook: %s: %v", event.Type, err)
+				return e.InternalServerError("Could not reconcile Square invoice", err)
 			}
-		default:
-			// Acknowledge events we don't handle so Square doesn't retry.
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{"ok": true})
 	}
 }
 
-// handleInvoicePaymentMade marks the matching PocketBase order as paid.
-func handleInvoicePaymentMade(e *core.RequestEvent, squareInvoiceID string) error {
+func squareInvoiceEvent(eventType string) (fsm.Event, bool) {
+	switch eventType {
+	case "invoice.payment_made":
+		return fsm.EventSquareInvoicePaid, true
+	case "invoice.canceled":
+		return fsm.EventSquareInvoiceCancelled, true
+	case "invoice.refunded":
+		return fsm.EventSquareNeedsReview, true
+	default:
+		return "", false
+	}
+}
+
+func handleInvoiceEvent(e *core.RequestEvent, squareInvoiceID string, event fsm.Event) error {
 	if squareInvoiceID == "" {
 		return fmt.Errorf("missing invoice ID in payload")
 	}
@@ -90,21 +99,24 @@ func handleInvoicePaymentMade(e *core.RequestEvent, squareInvoiceID string) erro
 		fmt.Sprintf("squareInvoiceId = '%s'", squareInvoiceID),
 		"", 1, 0,
 	)
-	if err != nil || len(records) == 0 {
-		return fmt.Errorf("order not found for squareInvoiceId %s", squareInvoiceID)
+	if err != nil {
+		return fmt.Errorf("find order for squareInvoiceId %s: %w", squareInvoiceID, err)
+	}
+	if len(records) == 0 {
+		return nil // Webhook can include unrelated invoices from the Square account.
 	}
 
 	order := records[0]
-	next, err := fsm.Apply(fsm.Status(order.GetString("status")), fsm.EventSquareInvoicePaid)
+	next, err := fsm.Apply(fsm.Status(order.GetString("status")), event)
 	if err != nil {
-		return fmt.Errorf("apply paid event: %w", err)
+		return fmt.Errorf("apply %s event: %w", event, err)
 	}
 	order.Set("status", string(next))
 	if err := e.App.Save(order); err != nil {
 		return fmt.Errorf("save order: %w", err)
 	}
 
-	log.Printf("square webhook: order %s marked as paid (invoice %s)", order.Id, squareInvoiceID)
+	log.Printf("square webhook: order %s applied %s (invoice %s)", order.Id, event, squareInvoiceID)
 	return nil
 }
 

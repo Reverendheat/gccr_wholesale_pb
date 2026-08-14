@@ -107,11 +107,11 @@ SMTP is required for:
 In Square Developer Dashboard:
 
 1. Register `SQUARE_WEBHOOK_URL`.
-2. Subscribe to `invoice.payment_made`.
+2. Subscribe to `invoice.payment_made`, `invoice.canceled`, and `invoice.refunded`.
 3. Put webhook signature key in `SQUARE_WEBHOOK_SIGNATURE_KEY`.
 4. Ensure webhook environment matches `SQUARE_SANDBOX`.
 
-Webhook marks matching local orders paid after Square invoice payment.
+GCCR Wholesale owns submitted order contents and fulfillment workflow. Submission locks catalog prices locally; Square order and invoice are created together when staff sends invoice. Square owns billing state: payment marks local order `paid`, cancellation marks it `cancelled`, and refunds require `needs_review`. Do not edit Square order line items directly. Invoice polling runs every 15 minutes as fallback for missed payment or cancellation webhooks.
 
 ## Initial provisioning
 

@@ -1,8 +1,8 @@
 # TODOs
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-14
 
-- [ ] Plan Square order/invoice reconciliation. Decide how app handles Square-side order changes and whether lifecycle needs a Go FSM.
+- [x] Define Square order/invoice ownership: GCCR Wholesale owns immutable submitted orders and locks pricing; Square order and invoice are created together at invoicing; Square billing events feed the existing Go FSM. Direct Square line-item edits are unsupported.
 - [ ] Decide whether customers can edit submitted orders and how edits update corresponding Square entities.
 - [ ] Fix existing frontend lint errors in `AuthContext.tsx`: initialize restored auth state without synchronous `setState` in an effect, and split `useAuth`/context exports from component exports for React Fast Refresh.
 - [ ] Migrate wholesale catalog to Hilltop:

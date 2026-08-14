@@ -100,7 +100,7 @@ SQUARE_WHOLESALE_CATEGORY_ID=...
 
 ### Verify webhook
 
-Square Developer Dashboard must subscribe production webhook URL to `invoice.payment_made`. Successful webhook transitions matching invoiced order to `paid`.
+Square Developer Dashboard must subscribe production webhook URL to `invoice.payment_made`, `invoice.canceled`, and `invoice.refunded`. Matching local orders transition to `paid`, `cancelled`, or `needs_review` respectively.
 
 ## Reset administrator credentials
 

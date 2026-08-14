@@ -11,7 +11,6 @@ import (
 	"github.com/reverendheat/gccr_invoice/internal/orders"
 	"github.com/reverendheat/gccr_invoice/internal/orders/fsm"
 	"github.com/reverendheat/gccr_invoice/internal/square"
-	squaresdk "github.com/square/square-go-sdk/v3"
 )
 
 // Register wires a cron job that fires every 30 minutes and creates any
@@ -54,16 +53,7 @@ func process(app core.App, sq *square.Client, locationID string) error {
 // advances its next_run_at timestamp.
 func processOne(app core.App, sq *square.Client, locationID string, sr *core.Record) error {
 	ctx := context.Background()
-
-	customerRecord, err := app.FindRecordById("customers", sr.GetString("customer"))
-	if err != nil {
-		return fmt.Errorf("find customer: %w", err)
-	}
-
-	squareCustomerID := customerRecord.GetString("squareCustomerId")
-	if squareCustomerID == "" {
-		return fmt.Errorf("customer %s has no squareCustomerId", customerRecord.Id)
-	}
+	var err error
 
 	var lineItemsRaw []map[string]any
 	if err := sr.UnmarshalJSONField("lineItems", &lineItemsRaw); err != nil {
@@ -76,10 +66,11 @@ func processOne(app core.App, sq *square.Client, locationID string, sr *core.Rec
 		if q, ok := li["quantity"].(float64); ok {
 			qty = int(q)
 		}
+		note, _ := li["note"].(string)
 		items = append(items, orders.LineItem{
 			VariationID: fmt.Sprint(li["variation_id"]),
 			Quantity:    qty,
-			Note:        fmt.Sprint(li["note"]),
+			Note:        note,
 		})
 	}
 
@@ -94,14 +85,14 @@ func processOne(app core.App, sq *square.Client, locationID string, sr *core.Rec
 		return fmt.Errorf("validate fulfillment: %w", err)
 	}
 
-	// idempotency key embeds both the scheduled order ID and the current date
-	// so re-runs on the same day are safe.
-	idempotencyKey := fmt.Sprintf("sched-%s-%s", sr.Id, time.Now().UTC().Format("20060102"))
+	items, err = orders.LockPrices(ctx, sq, locationID, items)
+	if err != nil {
+		return fmt.Errorf("lock order pricing: %w", err)
+	}
 
 	pbOrder, err := orders.Create(
-		ctx, app, sq,
-		locationID, sr.GetString("customer"), sr.GetString("company"), squareCustomerID,
-		items, fulfillment, sr.GetString("notes"), idempotencyKey,
+		app, sr.GetString("customer"), sr.GetString("company"),
+		items, fulfillment, sr.GetString("notes"),
 	)
 	if err != nil {
 		return fmt.Errorf("create order: %w", err)
@@ -163,13 +154,15 @@ func reconcileInvoices(app core.App, sq *square.Client) error {
 			changed = true
 		}
 
-		if inv.Status != nil && *inv.Status == squaresdk.InvoiceStatusPaid && order.GetString("status") != string(fsm.StatusPaid) {
-			next, err := fsm.Apply(fsm.Status(order.GetString("status")), fsm.EventSquareInvoicePaid)
-			if err != nil {
-				log.Printf("reconcile: order %s: could not apply paid event: %v", order.Id, err)
-			} else {
-				order.Set("status", string(next))
-				changed = true
+		if inv.Status != nil {
+			if event, ok := fsm.EventForSquareInvoiceStatus(string(*inv.Status)); ok {
+				next, err := fsm.Apply(fsm.Status(order.GetString("status")), event)
+				if err != nil {
+					log.Printf("reconcile: order %s: could not apply %s: %v", order.Id, event, err)
+				} else if string(next) != order.GetString("status") {
+					order.Set("status", string(next))
+					changed = true
+				}
 			}
 		}
 

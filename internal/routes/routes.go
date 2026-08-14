@@ -179,16 +179,17 @@ func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestE
 			return e.BadRequestError(err.Error(), nil)
 		}
 
-		squareCustomerID := e.Auth.GetString("squareCustomerId")
-		if squareCustomerID == "" {
+		if e.Auth.GetString("squareCustomerId") == "" {
 			return e.ForbiddenError("Account is not linked to Square", nil)
 		}
 
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		if err != nil {
+			return e.InternalServerError("Could not lock order pricing", err)
+		}
 		pbOrder, err := orders.Create(
-			e.Request.Context(), e.App, sq,
-			locationID, e.Auth.Id, e.Auth.GetString("company"), squareCustomerID,
-			toOrderLineItems(body.LineItems), fulfillment, body.Notes,
-			fmt.Sprintf("order-%s", e.Auth.Id+time.Now().UTC().Format("20060102150405")),
+			e.App, e.Auth.Id, e.Auth.GetString("company"),
+			lineItems, fulfillment, body.Notes,
 		)
 		if err != nil {
 			return e.InternalServerError("Could not create order", err)
@@ -331,19 +332,19 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 			return e.BadRequestError(err.Error(), nil)
 		}
 
-		squareCustomerID := e.Auth.GetString("squareCustomerId")
-		if squareCustomerID == "" {
+		if e.Auth.GetString("squareCustomerId") == "" {
 			return e.ForbiddenError("Account is not linked to Square", nil)
 		}
 
-		lineItems := toOrderLineItems(body.LineItems)
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		if err != nil {
+			return e.InternalServerError("Could not lock initial order pricing", err)
+		}
 
-		// Place the first order immediately so the customer sees instant confirmation.
+		// Place the first local order immediately so the customer sees confirmation.
 		firstOrder, err := orders.Create(
-			e.Request.Context(), e.App, sq,
-			locationID, e.Auth.Id, e.Auth.GetString("company"), squareCustomerID,
+			e.App, e.Auth.Id, e.Auth.GetString("company"),
 			lineItems, fulfillment, body.Notes,
-			fmt.Sprintf("sched-first-%s-%s", e.Auth.Id, time.Now().UTC().Format("20060102150405")),
 		)
 		if err != nil {
 			return e.InternalServerError("Could not create initial order", err)
@@ -480,10 +481,6 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 			return e.NotFoundError("Order not found", err)
 		}
 
-		squareOrderID := order.GetString("squareOrderId")
-		if squareOrderID == "" {
-			return e.BadRequestError("Order has no Square order ID", nil)
-		}
 		if order.GetString("squareInvoiceId") != "" {
 			return e.BadRequestError("Invoice already sent for this order", nil)
 		}
@@ -499,6 +496,13 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 		squareCustomerID := customerRecord.GetString("squareCustomerId")
 		if squareCustomerID == "" {
 			return e.BadRequestError("Customer has no Square customer ID", nil)
+		}
+
+		squareOrderID, err := orders.SubmitToSquare(
+			e.Request.Context(), e.App, sq, locationID, squareCustomerID, order,
+		)
+		if err != nil {
+			return e.InternalServerError("Could not create Square order", err)
 		}
 
 		// Default due date: 30 days from today.
