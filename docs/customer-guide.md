@@ -21,7 +21,7 @@ If welcome email does not arrive, contact GCCR staff. If account was created, yo
 5. Retrieve code from email.
 6. Enter code before it expires.
 
-No password is needed. Each login uses one-time email code.
+No password is needed. Each login uses one-time email code. Email capitalization does not matter.
 
 ## Add to iPhone Home Screen
 
@@ -36,7 +36,7 @@ Home Screen icon opens portal in standalone app window. Installed users do not s
 If code does not arrive:
 
 - Confirm you selected **Customer**, not **Staff**.
-- Confirm email matches invitation exactly.
+- Confirm email address matches invitation; capitalization does not matter.
 - Check spam/junk folder.
 - Ask GCCR staff to confirm customer account exists.
 

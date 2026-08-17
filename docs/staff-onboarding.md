@@ -19,7 +19,7 @@ You need:
 5. Retrieve one-time code from email.
 6. Enter code before it expires.
 
-Staff uses one-time codes, not passwords. If code does not arrive, confirm email spelling, check spam, then contact administrator to verify `users` record and SMTP delivery.
+Staff uses one-time codes, not passwords. Email capitalization does not matter. If code does not arrive, confirm email spelling, check spam, then contact administrator to verify `users` record and SMTP delivery.
 
 ## Add to iPhone Home Screen
 

@@ -105,6 +105,47 @@ func TestFulfillmentMigrationAddsOrderAndScheduleSnapshots(t *testing.T) {
 	}
 }
 
+func TestAuthEmailLookupIsCaseInsensitive(t *testing.T) {
+	app := pocketbase.NewWithConfig(pocketbase.Config{
+		DefaultDataDir:  t.TempDir(),
+		HideStartBanner: true,
+	})
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+	defer app.ResetBootstrapState()
+
+	if err := app.RunAppMigrations(); err != nil {
+		t.Fatalf("run app migrations: %v", err)
+	}
+
+	for _, collectionName := range []string{"users", "customers"} {
+		collection, err := app.FindCollectionByNameOrId(collectionName)
+		if err != nil {
+			t.Fatalf("find %s: %v", collectionName, err)
+		}
+
+		record := core.NewRecord(collection)
+		record.SetEmail("mixed.case@example.com")
+		record.SetPassword("test-password-12345")
+		if collectionName == "customers" {
+			record.Set("name", "Mixed Case Customer")
+			record.Set("squareCustomerId", "square-mixed-case")
+		}
+		if err := app.Save(record); err != nil {
+			t.Fatalf("save %s record: %v", collectionName, err)
+		}
+
+		found, err := app.FindAuthRecordByEmail(collectionName, "MIXED.CASE@EXAMPLE.COM")
+		if err != nil {
+			t.Fatalf("case-insensitive %s email lookup failed: %v", collectionName, err)
+		}
+		if found.Id != record.Id {
+			t.Fatalf("case-insensitive %s lookup found %q, want %q", collectionName, found.Id, record.Id)
+		}
+	}
+}
+
 func TestAccountAccessMigrationRunsAfterCompanyCreation(t *testing.T) {
 	positions := migrationPositions()
 
