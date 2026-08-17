@@ -167,6 +167,9 @@
 .order-detail-notes {
   margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);
 }
+.btn-edit-order {
+  margin-top: 0.75rem; padding: 0.4rem 0.8rem; font-size: 0.85rem;
+}
 
 /* Tab badge (scheduled orders count) */
 .tab-badge {
@@ -238,6 +241,9 @@
   text-decoration: underline;
 }
 .link-btn:hover { color: var(--primary-hover); }
+.cart-cancel-edit {
+  display: block; margin: 0.75rem auto 0;
+}
 
 /* Scheduled orders info note */
 .schedule-info {

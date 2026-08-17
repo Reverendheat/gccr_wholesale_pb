@@ -33,6 +33,28 @@ func TestCustomerRecordFilterCanRequireActiveRecords(t *testing.T) {
 	}
 }
 
+func TestCustomerCanEditOnlyOwnPendingOrder(t *testing.T) {
+	tests := []struct {
+		name       string
+		customerID string
+		ownerID    string
+		status     string
+		want       bool
+	}{
+		{name: "own pending order", customerID: "customer1", ownerID: "customer1", status: "pending", want: true},
+		{name: "account peer pending order", customerID: "customer1", ownerID: "customer2", status: "pending", want: false},
+		{name: "own confirmed order", customerID: "customer1", ownerID: "customer1", status: "confirmed", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := customerCanEditOrder(tt.customerID, tt.ownerID, tt.status); got != tt.want {
+				t.Fatalf("customerCanEditOrder() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateAccountSelection(t *testing.T) {
 	tests := []struct {
 		name           string

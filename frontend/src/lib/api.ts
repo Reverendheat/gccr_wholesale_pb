@@ -206,6 +206,24 @@ export async function submitOrder(
   return res.json();
 }
 
+export async function updateOrder(
+  id: string,
+  lineItems: LineItemInput[],
+  notes: string,
+  fulfillment: Fulfillment,
+): Promise<Order> {
+  const res = await fetch(`${BASE}/orders/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ lineItems, notes, fulfillment }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Order update failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchOrders(): Promise<Order[]> {
   const res = await fetch(`${BASE}/orders`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Orders fetch failed: ${res.status}`);

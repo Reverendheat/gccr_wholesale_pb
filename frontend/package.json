@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test:pwa": "node --test scripts/pwa.test.mjs",
     "test:staff-mobile": "node --test scripts/staff-mobile.test.mjs",
+    "test:order-edit": "node --test scripts/order-edit.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

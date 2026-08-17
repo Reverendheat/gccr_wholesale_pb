@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   fetchWholesaleCatalog,
   submitOrder,
+  updateOrder,
   submitScheduledOrder,
   fetchOrders,
   fetchScheduledOrders,
@@ -87,6 +88,7 @@ export default function CustomerPortal() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   // Schedule mode state
   const [scheduleMode, setScheduleMode] = useState(false);
@@ -170,6 +172,54 @@ export default function CustomerPortal() {
     return null;
   }
 
+  function startEditingOrder(order: Order) {
+    const nextCart: CartItem[] = [];
+    for (const lineItem of order.lineItems) {
+      let match: CartItem | null = null;
+      for (const item of catalog) {
+        const variation = item.item_data.variations.find(
+          (candidate) => candidate.id === lineItem.variation_id,
+        );
+        if (variation) {
+          match = {
+            variation,
+            itemName: item.item_data.name,
+            quantity: lineItem.quantity,
+          };
+          break;
+        }
+      }
+      if (!match) {
+        setError("This order contains an item no longer available in the wholesale catalog.");
+        return;
+      }
+      nextCart.push(match);
+    }
+
+    setCart(nextCart);
+    setNotes(order.notes ?? "");
+    setFulfillment(order.fulfillment ?? {
+      method: "pickup",
+      recipient_name: String(user?.name ?? ""),
+      recipient_phone: String(user?.phone ?? ""),
+      country: "US",
+    });
+    setEditingOrderId(order.id);
+    setScheduleMode(false);
+    setExpandedOrder(null);
+    setError(null);
+    setTab("catalog");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEditingOrder() {
+    setEditingOrderId(null);
+    setCart([]);
+    setNotes("");
+    setError(null);
+    setTab("orders");
+  }
+
   async function handleSubmitOrder() {
     if (cart.length === 0) return;
     const fulfillmentError = validateFulfillment();
@@ -180,11 +230,23 @@ export default function CustomerPortal() {
     setSubmitting(true);
     setError(null);
     try {
-      const order = await submitOrder(lineItemsFromCart(), notes, fulfillment);
-      setOrders((prev) => [order, ...prev]);
+      if (editingOrderId) {
+        const order = await updateOrder(
+          editingOrderId,
+          lineItemsFromCart(),
+          notes,
+          fulfillment,
+        );
+        setOrders((prev) => prev.map((existing) => existing.id === order.id ? order : existing));
+        setEditingOrderId(null);
+        setSuccess("Order updated successfully!");
+      } else {
+        const order = await submitOrder(lineItemsFromCart(), notes, fulfillment);
+        setOrders((prev) => [order, ...prev]);
+        setSuccess("Order placed successfully!");
+      }
       setCart([]);
       setNotes("");
-      setSuccess("Order placed successfully!");
       setTab("orders");
       setTimeout(() => setSuccess(null), 4000);
     } catch (e: unknown) {
@@ -326,7 +388,10 @@ export default function CustomerPortal() {
             </section>
 
             <aside className="cart">
-              <h2>Your Order</h2>
+              <h2>{editingOrderId ? "Edit Order" : "Your Order"}</h2>
+              {editingOrderId && (
+                <p className="muted">Changes are allowed while this order is pending.</p>
+              )}
               {cart.length === 0 ? (
                 <p className="muted">Add items from the catalog.</p>
               ) : (
@@ -480,16 +545,18 @@ export default function CustomerPortal() {
                   />
 
                   {/* Schedule toggle */}
-                  <label className="schedule-toggle">
-                    <input
-                      type="checkbox"
-                      checked={scheduleMode}
-                      onChange={(e) => setScheduleMode(e.target.checked)}
-                    />
-                    <span>Set as a recurring order</span>
-                  </label>
+                  {!editingOrderId && (
+                    <label className="schedule-toggle">
+                      <input
+                        type="checkbox"
+                        checked={scheduleMode}
+                        onChange={(e) => setScheduleMode(e.target.checked)}
+                      />
+                      <span>Set as a recurring order</span>
+                    </label>
+                  )}
 
-                  {scheduleMode && (
+                  {!editingOrderId && scheduleMode && (
                     <div className="schedule-frequency">
                       <p className="schedule-frequency-label">Repeat every:</p>
                       <div className="schedule-frequency-options">
@@ -516,7 +583,7 @@ export default function CustomerPortal() {
                     </div>
                   )}
 
-                  {scheduleMode ? (
+                  {!editingOrderId && scheduleMode ? (
                     <button
                       className="cart-submit cart-submit-schedule"
                       onClick={handleSubmitScheduledOrder}
@@ -527,13 +594,26 @@ export default function CustomerPortal() {
                         : `Schedule ${FREQUENCY_LABELS[frequency]} Order`}
                     </button>
                   ) : (
-                    <button
-                      className="cart-submit"
-                      onClick={handleSubmitOrder}
-                      disabled={submitting}
-                    >
-                      {submitting ? "Placing order…" : "Place Order"}
-                    </button>
+                    <>
+                      <button
+                        className="cart-submit"
+                        onClick={handleSubmitOrder}
+                        disabled={submitting}
+                      >
+                        {submitting
+                          ? editingOrderId ? "Saving changes…" : "Placing order…"
+                          : editingOrderId ? "Save Changes" : "Place Order"}
+                      </button>
+                      {editingOrderId && (
+                        <button
+                          className="link-btn cart-cancel-edit"
+                          onClick={cancelEditingOrder}
+                          disabled={submitting}
+                        >
+                          Cancel editing
+                        </button>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -626,6 +706,14 @@ export default function CustomerPortal() {
                                 <p className="order-detail-notes">
                                   <strong>Notes:</strong> {o.notes}
                                 </p>
+                              )}
+                              {o.customer === user?.id && o.status === "pending" && (
+                                <button
+                                  className="btn-edit-order"
+                                  onClick={() => startEditingOrder(o)}
+                                >
+                                  Edit order
+                                </button>
                               )}
                             </div>
                           </td>

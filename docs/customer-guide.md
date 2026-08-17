@@ -74,7 +74,7 @@ Open **Account Orders** to view orders submitted by you and other members of you
 - Current status
 - Square invoice link when available
 
-Select order row to expand item details.
+Select order row to expand item details. Order creator can select **Edit order** while status is `pending`. Editing replaces items, quantities, fulfillment, and notes, then locks current catalog prices. Other account members have read-only access. After staff confirms or invoices order, contact GCCR staff for corrections.
 
 ## Create recurring order
 

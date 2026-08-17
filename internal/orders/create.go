@@ -134,6 +134,43 @@ func Create(
 	return refreshed, nil
 }
 
+// UpdatePending replaces the editable snapshot of a pending local order.
+// Prices must already be locked against the current wholesale catalog.
+func UpdatePending(
+	app core.App,
+	order *core.Record,
+	items []LineItem,
+	fulfillment Fulfillment,
+	notes string,
+) (*core.Record, error) {
+	if order.GetString("status") != "pending" ||
+		order.GetString("squareOrderId") != "" ||
+		order.GetString("squareInvoiceId") != "" {
+		return nil, fmt.Errorf("only pending orders not yet submitted to Square can be edited")
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("at least one line item is required")
+	}
+	for _, item := range items {
+		if item.VariationID == "" || item.Quantity <= 0 || item.Currency == "" {
+			return nil, fmt.Errorf("line items require variation, positive quantity, and locked currency")
+		}
+	}
+
+	order.Set("lineItems", items)
+	order.Set("fulfillment", fulfillment)
+	order.Set("notes", notes)
+	if err := app.Save(order); err != nil {
+		return nil, fmt.Errorf("save pending order: %w", err)
+	}
+
+	updated, err := app.FindRecordById("orders", order.Id)
+	if err != nil {
+		return nil, fmt.Errorf("refresh pending order: %w", err)
+	}
+	return updated, nil
+}
+
 // SubmitToSquare creates the delayed Square order from its locked local
 // snapshot and persists the resulting Square ID. Repeated calls are safe.
 func SubmitToSquare(

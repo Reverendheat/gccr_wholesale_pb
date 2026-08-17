@@ -33,6 +33,9 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string) {
 	// GET /api/wholesale/orders — customers see own/account records; staff see all
 	g.GET("/orders", handleListOrders())
 
+	// PATCH /api/wholesale/orders/{id} — customer edits their own pending order
+	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID))
+
 	// POST /api/wholesale/orders/{id}/events — staff applies a workflow event
 	g.POST("/orders/{id}/events", handleOrderEvent())
 
@@ -196,6 +199,50 @@ func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestE
 		}
 
 		return e.JSON(http.StatusOK, pbOrder)
+	}
+}
+
+func customerCanEditOrder(customerID, ownerID, status string) bool {
+	return customerID == ownerID && status == string(fsm.StatusPending)
+}
+
+func handleUpdateOrder(sq *square.Client, locationID string) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
+			return e.ForbiddenError("Only customers can edit orders", nil)
+		}
+
+		var body createOrderBody
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Invalid request body", err)
+		}
+		if err := validateLineItems(body.LineItems); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		fulfillment, err := orders.NormalizeFulfillment(body.Fulfillment)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		order, err := e.App.FindRecordById("orders", e.Request.PathValue("id"))
+		if err != nil {
+			return e.NotFoundError("Order not found", err)
+		}
+		if !customerCanEditOrder(e.Auth.Id, order.GetString("customer"), order.GetString("status")) {
+			return e.ForbiddenError("Only your own pending orders can be edited", nil)
+		}
+
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		if err != nil {
+			return e.BadRequestError("Could not update order pricing", err)
+		}
+		order, err = orders.UpdatePending(e.App, order, lineItems, fulfillment, body.Notes)
+		if err != nil {
+			return e.BadRequestError(err.Error(), err)
+		}
+		addSubmittedBy(e.App, order)
+
+		return e.JSON(http.StatusOK, order)
 	}
 }
 

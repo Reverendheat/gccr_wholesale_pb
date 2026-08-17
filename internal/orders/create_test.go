@@ -74,6 +74,93 @@ func TestCreateStoresLocalPricedOrderWithoutSquareOrder(t *testing.T) {
 	}
 }
 
+func TestUpdatePendingReplacesEditableOrderSnapshot(t *testing.T) {
+	app, customer := newOrderTestApp(t)
+	order, err := Create(app, customer.Id, "", []LineItem{{
+		VariationID: "VAR1", Name: "Coffee", Quantity: 1, UnitPriceCents: 1250, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "old note")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := UpdatePending(app, order, []LineItem{{
+		VariationID: "VAR2", Name: "Tea", Quantity: 3, UnitPriceCents: 800, Currency: "USD",
+	}}, Fulfillment{
+		Method: FulfillmentDelivery, RecipientName: "Customer", RecipientPhone: "555-123-4567",
+		AddressLine1: "123 Main St", City: "Phoenix", State: "AZ", PostalCode: "85001", Country: "US",
+	}, "new note")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.GetString("notes") != "new note" {
+		t.Fatalf("notes = %q", updated.GetString("notes"))
+	}
+	var items []LineItem
+	if err := updated.UnmarshalJSONField("lineItems", &items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].VariationID != "VAR2" || items[0].Quantity != 3 || items[0].UnitPriceCents != 800 {
+		t.Fatalf("updated items = %+v", items)
+	}
+	var fulfillment Fulfillment
+	if err := updated.UnmarshalJSONField("fulfillment", &fulfillment); err != nil {
+		t.Fatal(err)
+	}
+	if fulfillment.Method != FulfillmentDelivery || fulfillment.AddressLine1 != "123 Main St" {
+		t.Fatalf("updated fulfillment = %+v", fulfillment)
+	}
+}
+
+func TestUpdatePendingRejectsNonPendingOrder(t *testing.T) {
+	app, customer := newOrderTestApp(t)
+	order, err := Create(app, customer.Id, "", []LineItem{{
+		VariationID: "VAR1", Name: "Coffee", Quantity: 1, UnitPriceCents: 1250, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "old note")
+	if err != nil {
+		t.Fatal(err)
+	}
+	order.Set("status", "confirmed")
+	if err := app.Save(order); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = UpdatePending(app, order, []LineItem{{
+		VariationID: "VAR2", Name: "Tea", Quantity: 3, UnitPriceCents: 800, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "new note")
+	if err == nil {
+		t.Fatal("expected confirmed order update to fail")
+	}
+
+	unchanged, err := app.FindRecordById("orders", order.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.GetString("notes") != "old note" {
+		t.Fatalf("notes changed to %q", unchanged.GetString("notes"))
+	}
+}
+
+func TestUpdatePendingRejectsOrderAlreadySubmittedToSquare(t *testing.T) {
+	app, customer := newOrderTestApp(t)
+	order, err := Create(app, customer.Id, "", []LineItem{{
+		VariationID: "VAR1", Name: "Coffee", Quantity: 1, UnitPriceCents: 1250, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "old note")
+	if err != nil {
+		t.Fatal(err)
+	}
+	order.Set("squareOrderId", "SQORDER1")
+	if err := app.Save(order); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = UpdatePending(app, order, []LineItem{{
+		VariationID: "VAR2", Name: "Tea", Quantity: 3, UnitPriceCents: 800, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "new note")
+	if err == nil {
+		t.Fatal("expected Square-submitted order update to fail")
+	}
+}
+
 func TestSubmitToSquareUsesLockedPriceAndPersistsSquareID(t *testing.T) {
 	app, customer := newOrderTestApp(t)
 	order, err := Create(app, customer.Id, "", []LineItem{{
