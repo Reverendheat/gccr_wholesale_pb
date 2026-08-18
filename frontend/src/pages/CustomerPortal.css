@@ -88,8 +88,8 @@
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 1.5rem;
   position: sticky; top: 1.5rem;
-  max-height: calc(100vh - 3rem); overflow-y: auto;
-  overscroll-behavior: contain; box-sizing: border-box;
+  max-height: calc(100dvh - 3rem); overflow-y: auto;
+  box-sizing: border-box;
 }
 @media (max-width: 900px) {
   .cart { position: static; max-height: none; overflow-y: visible; }
