@@ -44,9 +44,10 @@ function InviteModal({
     try {
       if (!preview) {
         const result = await previewCustomer(email.trim());
+        const suggestedAccounts = result.suggested_accounts ?? [];
         setPreview(result.customer);
-        if (result.suggested_accounts.length === 1) {
-          setCompanyId(result.suggested_accounts[0].id);
+        if (suggestedAccounts.length === 1) {
+          setCompanyId(suggestedAccounts[0].id);
         } else if (result.customer.company_name) {
           setNewCompanyName(result.customer.company_name);
         }
@@ -213,8 +214,9 @@ export default function Customers() {
       const squareName = result.customer.company_name.trim();
       if (!squareName) throw new Error("Square customer has no company name");
 
-      if (result.suggested_accounts.length === 1) {
-        const account = result.suggested_accounts[0];
+      const suggestedAccounts = result.suggested_accounts ?? [];
+      if (suggestedAccounts.length === 1) {
+        const account = suggestedAccounts[0];
         if (!window.confirm(`Square company is “${squareName}”. Link to existing account “${account.name}”?`)) return;
         await saveAccountSelection(customer, { company_id: account.id });
       } else {

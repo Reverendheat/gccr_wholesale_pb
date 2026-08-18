@@ -156,6 +156,19 @@ func TestAssignCustomerCompanyBackfillsUnassignedHistoryOnly(t *testing.T) {
 	}
 }
 
+func TestFindSuggestedAccountsReturnsNonNilEmptySliceWithoutCompanyName(t *testing.T) {
+	got, err := findSuggestedAccounts(nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("suggested accounts must encode as [] instead of null")
+	}
+	if len(got) != 0 {
+		t.Fatalf("suggested accounts = %+v, want empty", got)
+	}
+}
+
 func TestCustomerDetailsIncludesSquareCompanyName(t *testing.T) {
 	details := customerDetails(&squaresdk.Customer{
 		ID:           squaresdk.String("square1"),

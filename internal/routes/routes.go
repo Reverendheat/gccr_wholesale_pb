@@ -654,6 +654,24 @@ func findSquareCustomer(sq *square.Client, e *core.RequestEvent, email string) (
 	return customer, nil
 }
 
+func findSuggestedAccounts(app core.App, companyName string) ([]map[string]string, error) {
+	suggested := make([]map[string]string, 0)
+	if companyName == "" {
+		return suggested, nil
+	}
+
+	companies, err := app.FindAllRecords("companies")
+	if err != nil {
+		return nil, err
+	}
+	for _, company := range companies {
+		if normalizeCompanyName(company.GetString("name")) == normalizeCompanyName(companyName) {
+			suggested = append(suggested, map[string]string{"id": company.Id, "name": company.GetString("name")})
+		}
+	}
+	return suggested, nil
+}
+
 func handlePreviewCustomer(sq *square.Client) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "users" {
@@ -670,17 +688,9 @@ func handlePreviewCustomer(sq *square.Client) func(*core.RequestEvent) error {
 		}
 		details := customerDetails(customer, strings.TrimSpace(body.Email))
 
-		var suggested []map[string]string
-		if details.CompanyName != "" {
-			companies, findErr := e.App.FindAllRecords("companies")
-			if findErr != nil {
-				return e.InternalServerError("Could not search wholesale accounts", findErr)
-			}
-			for _, company := range companies {
-				if normalizeCompanyName(company.GetString("name")) == normalizeCompanyName(details.CompanyName) {
-					suggested = append(suggested, map[string]string{"id": company.Id, "name": company.GetString("name")})
-				}
-			}
+		suggested, err := findSuggestedAccounts(e.App, details.CompanyName)
+		if err != nil {
+			return e.InternalServerError("Could not search wholesale accounts", err)
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{"customer": details, "suggested_accounts": suggested})

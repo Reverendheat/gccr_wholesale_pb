@@ -274,7 +274,7 @@ export interface SquareCustomerPreview {
 
 export interface PreviewCustomerResult {
   customer: SquareCustomerPreview;
-  suggested_accounts: CompanyRecord[];
+  suggested_accounts: CompanyRecord[] | null;
 }
 
 export async function previewCustomer(email: string): Promise<PreviewCustomerResult> {
