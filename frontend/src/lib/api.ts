@@ -147,6 +147,12 @@ export interface FulfillmentQuoteResult {
   total_cents: number;
 }
 
+export interface FulfillmentOptions {
+  max_miles: number;
+  free_minimum_cents: number;
+  rate_cents_per_mile: number;
+}
+
 export interface Order {
   id: string;
   customer: string;
@@ -198,6 +204,12 @@ export async function fetchWholesaleCatalog(): Promise<CatalogItem[]> {
   if (!res.ok) throw new Error(`Catalog fetch failed: ${res.status}`);
   const data = await res.json();
   return data.items ?? [];
+}
+
+export async function fetchFulfillmentOptions(): Promise<FulfillmentOptions> {
+  const res = await fetch(`${BASE}/fulfillment/options`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Fulfillment options failed: ${res.status}`);
+  return res.json();
 }
 
 export async function quoteFulfillment(

@@ -8,6 +8,7 @@ import {
   fetchOrders,
   fetchScheduledOrders,
   cancelScheduledOrder,
+  fetchFulfillmentOptions,
   quoteFulfillment,
   type CatalogItem,
   type CatalogVariation,
@@ -15,6 +16,7 @@ import {
   type ScheduledOrder,
   type ScheduleFrequency,
   type Fulfillment,
+  type FulfillmentOptions,
   type FulfillmentQuoteResult,
 } from "../lib/api";
 import "./CustomerPortal.css";
@@ -90,6 +92,7 @@ export default function CustomerPortal() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [scheduledOrders, setScheduledOrders] = useState<ScheduledOrder[]>([]);
+  const [fulfillmentOptions, setFulfillmentOptions] = useState<FulfillmentOptions | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
   const [fulfillment, setFulfillment] = useState<Fulfillment>({
@@ -123,14 +126,16 @@ export default function CustomerPortal() {
   useEffect(() => {
     async function load() {
       try {
-        const [items, orderList, scheduledList] = await Promise.all([
+        const [items, orderList, scheduledList, options] = await Promise.all([
           fetchWholesaleCatalog(),
           fetchOrders(),
           fetchScheduledOrders(),
+          fetchFulfillmentOptions(),
         ]);
         setCatalog(items);
         setOrders(orderList);
         setScheduledOrders(scheduledList);
+        setFulfillmentOptions(options);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load data");
       } finally {
@@ -518,7 +523,7 @@ export default function CustomerPortal() {
                           checked={fulfillment.method === "delivery"}
                           onChange={() => updateFulfillment("method", "delivery")}
                         />
-                        Delivery
+                        Delivery{fulfillmentOptions && ` (within ${fulfillmentOptions.max_miles} driving miles)`}
                       </label>
                     </div>
 
@@ -592,7 +597,9 @@ export default function CustomerPortal() {
                             rows={2}
                           />
                         </label>
-                        <p className="delivery-country">United States addresses only · maximum 30 driving miles</p>
+                        <p className="delivery-country">
+                          United States addresses only{fulfillmentOptions && ` · within ${fulfillmentOptions.max_miles} driving miles`}
+                        </p>
                         {quotingDelivery && <p className="delivery-quote pending">Calculating driving distance…</p>}
                         {activeDeliveryQuoteError && <p className="delivery-quote error">{activeDeliveryQuoteError}</p>}
                         {activeDeliveryQuote && (

@@ -64,6 +64,18 @@ type Policy struct {
 	RateCentsPerMile int64
 }
 
+type Options struct {
+	MaxMiles         float64 `json:"max_miles"`
+	FreeMinimumCents int64   `json:"free_minimum_cents"`
+	RateCentsPerMile int64   `json:"rate_cents_per_mile"`
+}
+
+func (p Policy) Options() Options {
+	return Options{
+		MaxMiles: p.MaxMiles, FreeMinimumCents: p.FreeMinimumCents, RateCentsPerMile: p.RateCentsPerMile,
+	}
+}
+
 func (p Policy) Calculate(distanceMeters float64, merchandiseSubtotalCents int64, currency string) (Quote, error) {
 	if distanceMeters < 0 {
 		return Quote{}, fmt.Errorf("delivery distance cannot be negative")
@@ -98,6 +110,11 @@ type Quoter interface {
 	Quote(ctx context.Context, destination Address, merchandiseSubtotalCents int64, currency string) (Quote, error)
 }
 
+type Calculator interface {
+	Quoter
+	Options() Options
+}
+
 type Service struct {
 	locationID string
 	origins    OriginProvider
@@ -110,6 +127,10 @@ type Service struct {
 
 func NewService(locationID string, origins OriginProvider, router Router, policy Policy) *Service {
 	return &Service{locationID: locationID, origins: origins, router: router, policy: policy}
+}
+
+func (s *Service) Options() Options {
+	return s.policy.Options()
 }
 
 func (s *Service) Quote(ctx context.Context, destination Address, merchandiseSubtotalCents int64, currency string) (Quote, error) {

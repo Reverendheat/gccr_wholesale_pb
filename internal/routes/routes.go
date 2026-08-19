@@ -22,30 +22,31 @@ import (
 )
 
 // Register binds all custom application routes onto the serve event.
-func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) {
+func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliveryCalculator delivery.Calculator) {
 	g := se.Router.Group("/api/wholesale")
 	g.Bind(apis.RequireAuth())
 
 	// GET /api/wholesale/catalog — returns active wholesale items from Square
 	g.GET("/catalog", handleCatalog(sq))
 
-	// POST /api/wholesale/fulfillment/quote — calculates authoritative delivery pricing
-	g.POST("/fulfillment/quote", handleFulfillmentQuote(sq, locationID, deliveryQuoter))
+	// Fulfillment options expose public policy; quotes remain server-authoritative.
+	g.GET("/fulfillment/options", handleFulfillmentOptions(deliveryCalculator))
+	g.POST("/fulfillment/quote", handleFulfillmentQuote(sq, locationID, deliveryCalculator))
 
 	// POST /api/wholesale/orders — customer submits a one-time order
-	g.POST("/orders", handleCreateOrder(sq, locationID, deliveryQuoter))
+	g.POST("/orders", handleCreateOrder(sq, locationID, deliveryCalculator))
 
 	// GET /api/wholesale/orders — customers see own/account records; staff see all
 	g.GET("/orders", handleListOrders())
 
 	// PATCH /api/wholesale/orders/{id} — customer edits their own pending order
-	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID, deliveryQuoter))
+	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID, deliveryCalculator))
 
 	// POST /api/wholesale/orders/{id}/events — staff applies a workflow event
 	g.POST("/orders/{id}/events", handleOrderEvent())
 
 	// POST /api/wholesale/scheduled-orders — customer creates a recurring order
-	g.POST("/scheduled-orders", handleCreateScheduledOrder(sq, locationID, deliveryQuoter))
+	g.POST("/scheduled-orders", handleCreateScheduledOrder(sq, locationID, deliveryCalculator))
 
 	// GET /api/wholesale/scheduled-orders — list active scheduled orders
 	g.GET("/scheduled-orders", handleListScheduledOrders())
@@ -117,6 +118,12 @@ func toOrderLineItems(inputs []orderLineItemInput) []orders.LineItem {
 		}
 	}
 	return out
+}
+
+func handleFulfillmentOptions(deliveryCalculator delivery.Calculator) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		return e.JSON(http.StatusOK, deliveryCalculator.Options())
+	}
 }
 
 func handleFulfillmentQuote(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {

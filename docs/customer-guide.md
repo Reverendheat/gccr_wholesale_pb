@@ -59,7 +59,7 @@ Catalog is shared among customers; it is not customized by company account. Cont
 2. Adjust quantities.
 3. Choose **Pickup** or **Delivery**. Pickup is selected by default.
 4. For delivery, enter recipient, US delivery address, and optional delivery instructions.
-5. Wait for driving-distance quote. Delivery is available within 30 driving miles.
+5. Wait for driving-distance quote. Checkout displays current delivery radius configured by GCCR (30 driving miles by default).
 6. Review delivery fee and estimated total. Merchandise orders of $100 or more receive free delivery; smaller orders pay $0.50 per started driving mile.
 7. Add order notes or special requests if needed.
 8. Select **Place Order**.

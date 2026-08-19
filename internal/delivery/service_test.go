@@ -9,6 +9,10 @@ import (
 
 func TestPolicyAppliesDeliveryRules(t *testing.T) {
 	policy := Policy{MaxMiles: 30, FreeMinimumCents: 10000, RateCentsPerMile: 50}
+	options := policy.Options()
+	if options.MaxMiles != 30 || options.FreeMinimumCents != 10000 || options.RateCentsPerMile != 50 {
+		t.Fatalf("options = %+v", options)
+	}
 
 	tests := []struct {
 		name          string
