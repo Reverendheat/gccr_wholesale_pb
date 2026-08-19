@@ -69,7 +69,7 @@ GitHub token needs read access to repository contents and packages.
 
 ### GitHub Actions deployment secrets
 
-Configure these repository or production-environment secrets in GitHub:
+Configure these repository secrets or environment secrets under GitHub environment `prod - aws`:
 
 | Secret | Required | Purpose |
 |---|---|---|

@@ -48,7 +48,7 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    environment: production
+    environment: "prod - aws"
     permissions:
       contents: read
 
