@@ -2,6 +2,7 @@
 package routes
 
 import (
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/mailer"
+	"github.com/reverendheat/gccr_invoice/internal/delivery"
 	"github.com/reverendheat/gccr_invoice/internal/orders"
 	"github.com/reverendheat/gccr_invoice/internal/orders/fsm"
 	"github.com/reverendheat/gccr_invoice/internal/square"
@@ -20,27 +22,30 @@ import (
 )
 
 // Register binds all custom application routes onto the serve event.
-func Register(se *core.ServeEvent, sq *square.Client, locationID string) {
+func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) {
 	g := se.Router.Group("/api/wholesale")
 	g.Bind(apis.RequireAuth())
 
 	// GET /api/wholesale/catalog — returns active wholesale items from Square
 	g.GET("/catalog", handleCatalog(sq))
 
+	// POST /api/wholesale/fulfillment/quote — calculates authoritative delivery pricing
+	g.POST("/fulfillment/quote", handleFulfillmentQuote(sq, locationID, deliveryQuoter))
+
 	// POST /api/wholesale/orders — customer submits a one-time order
-	g.POST("/orders", handleCreateOrder(sq, locationID))
+	g.POST("/orders", handleCreateOrder(sq, locationID, deliveryQuoter))
 
 	// GET /api/wholesale/orders — customers see own/account records; staff see all
 	g.GET("/orders", handleListOrders())
 
 	// PATCH /api/wholesale/orders/{id} — customer edits their own pending order
-	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID))
+	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID, deliveryQuoter))
 
 	// POST /api/wholesale/orders/{id}/events — staff applies a workflow event
 	g.POST("/orders/{id}/events", handleOrderEvent())
 
 	// POST /api/wholesale/scheduled-orders — customer creates a recurring order
-	g.POST("/scheduled-orders", handleCreateScheduledOrder(sq, locationID))
+	g.POST("/scheduled-orders", handleCreateScheduledOrder(sq, locationID, deliveryQuoter))
 
 	// GET /api/wholesale/scheduled-orders — list active scheduled orders
 	g.GET("/scheduled-orders", handleListScheduledOrders())
@@ -114,6 +119,41 @@ func toOrderLineItems(inputs []orderLineItemInput) []orders.LineItem {
 	return out
 }
 
+func handleFulfillmentQuote(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
+			return e.ForbiddenError("Only customers can request fulfillment quotes", nil)
+		}
+		var body createOrderBody
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Invalid request body", err)
+		}
+		if err := validateLineItems(body.LineItems); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		if err != nil {
+			return e.BadRequestError("Could not price fulfillment quote", err)
+		}
+		fulfillment, subtotal, err := orders.QuoteFulfillment(e.Request.Context(), deliveryQuoter, body.Fulfillment, lineItems)
+		if err != nil {
+			return handleFulfillmentQuoteError(e, err)
+		}
+		return e.JSON(http.StatusOK, map[string]any{
+			"fulfillment":    fulfillment,
+			"subtotal_cents": subtotal,
+			"total_cents":    subtotal + fulfillment.FeeCents,
+		})
+	}
+}
+
+func handleFulfillmentQuoteError(e *core.RequestEvent, err error) error {
+	if errors.Is(err, delivery.ErrOutsideDeliveryArea) || errors.Is(err, delivery.ErrAddressNotFound) {
+		return e.BadRequestError(err.Error(), nil)
+	}
+	return e.InternalServerError("Could not calculate delivery quote", err)
+}
+
 // customerRecordFilter scopes records to those created by the customer or
 // snapshotted to their wholesale account. Creator access remains after an
 // account move, while account snapshots preserve historical visibility.
@@ -164,7 +204,7 @@ func addSubmittedBy(app core.App, record *core.Record) {
 	record.WithCustomData(true)
 }
 
-func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestEvent) error {
+func handleCreateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
 			return e.ForbiddenError("Only customers can place orders", nil)
@@ -190,6 +230,10 @@ func handleCreateOrder(sq *square.Client, locationID string) func(*core.RequestE
 		if err != nil {
 			return e.InternalServerError("Could not lock order pricing", err)
 		}
+		fulfillment, _, err = orders.QuoteFulfillment(e.Request.Context(), deliveryQuoter, fulfillment, lineItems)
+		if err != nil {
+			return handleFulfillmentQuoteError(e, err)
+		}
 		pbOrder, err := orders.Create(
 			e.App, e.Auth.Id, e.Auth.GetString("company"),
 			lineItems, fulfillment, body.Notes,
@@ -206,7 +250,7 @@ func customerCanEditOrder(customerID, ownerID, status string) bool {
 	return customerID == ownerID && status == string(fsm.StatusPending)
 }
 
-func handleUpdateOrder(sq *square.Client, locationID string) func(*core.RequestEvent) error {
+func handleUpdateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
 			return e.ForbiddenError("Only customers can edit orders", nil)
@@ -235,6 +279,10 @@ func handleUpdateOrder(sq *square.Client, locationID string) func(*core.RequestE
 		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.BadRequestError("Could not update order pricing", err)
+		}
+		fulfillment, _, err = orders.QuoteFulfillment(e.Request.Context(), deliveryQuoter, fulfillment, lineItems)
+		if err != nil {
+			return handleFulfillmentQuoteError(e, err)
 		}
 		order, err = orders.UpdatePending(e.App, order, lineItems, fulfillment, body.Notes)
 		if err != nil {
@@ -358,7 +406,7 @@ type createScheduledOrderBody struct {
 	Fulfillment orders.Fulfillment   `json:"fulfillment"`
 }
 
-func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core.RequestEvent) error {
+func handleCreateScheduledOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
 			return e.ForbiddenError("Only customers can create scheduled orders", nil)
@@ -386,6 +434,11 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.InternalServerError("Could not lock initial order pricing", err)
+		}
+		scheduleFulfillment := fulfillment
+		fulfillment, _, err = orders.QuoteFulfillment(e.Request.Context(), deliveryQuoter, fulfillment, lineItems)
+		if err != nil {
+			return handleFulfillmentQuoteError(e, err)
 		}
 
 		// Place the first local order immediately so the customer sees confirmation.
@@ -419,7 +472,7 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string) func(*core
 		sr.Set("company", e.Auth.GetString("company"))
 		sr.Set("frequency", body.Frequency)
 		sr.Set("lineItems", lineItemsSnapshot)
-		sr.Set("fulfillment", fulfillment)
+		sr.Set("fulfillment", scheduleFulfillment)
 		sr.Set("notes", body.Notes)
 		sr.Set("next_run_at", nextRunAt.Format("2006-01-02 15:04:05.000Z"))
 		sr.Set("active", true)

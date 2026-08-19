@@ -24,6 +24,25 @@ type LineItem struct {
 	Currency       string `json:"currency"`
 }
 
+// MerchandiseSubtotal returns locked merchandise total before fulfillment fees.
+func MerchandiseSubtotal(items []LineItem) (int64, string, error) {
+	if len(items) == 0 {
+		return 0, "", fmt.Errorf("at least one line item is required")
+	}
+	currency := items[0].Currency
+	var subtotal int64
+	for _, item := range items {
+		if item.Quantity <= 0 || item.UnitPriceCents < 0 || item.Currency == "" {
+			return 0, "", fmt.Errorf("line items require positive quantity, non-negative price, and currency")
+		}
+		if item.Currency != currency {
+			return 0, "", fmt.Errorf("all line items must use the same currency")
+		}
+		subtotal += item.UnitPriceCents * int64(item.Quantity)
+	}
+	return subtotal, currency, nil
+}
+
 // LockPrices resolves requested variations against the current wholesale
 // catalog and returns submission-time price snapshots.
 func LockPrices(ctx context.Context, sq *square.Client, locationID string, requested []LineItem) ([]LineItem, error) {
@@ -191,6 +210,24 @@ func SubmitToSquare(
 	squareItems, err := toSquareLineItems(items)
 	if err != nil {
 		return "", err
+	}
+	var fulfillment Fulfillment
+	if err := order.UnmarshalJSONField("fulfillment", &fulfillment); err != nil {
+		return "", fmt.Errorf("decode fulfillment snapshot: %w", err)
+	}
+	if fulfillment.Method == FulfillmentDelivery && fulfillment.FeeCents > 0 {
+		currency, err := squaresdk.NewCurrencyFromString(fulfillment.Currency)
+		if err != nil {
+			return "", fmt.Errorf("delivery fee currency: %w", err)
+		}
+		squareItems = append(squareItems, &squaresdk.OrderLineItem{
+			Name:     squaresdk.String("Local delivery"),
+			Quantity: "1",
+			BasePriceMoney: &squaresdk.Money{
+				Amount:   squaresdk.Int64(fulfillment.FeeCents),
+				Currency: &currency,
+			},
+		})
 	}
 
 	squareOrder, err := sq.CreateOrder(

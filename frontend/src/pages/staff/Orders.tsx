@@ -158,6 +158,11 @@ function OrderDrawer({
                   {order.fulfillment.address_line_2 && <>{order.fulfillment.address_line_2}<br /></>}
                   {order.fulfillment.city}, {order.fulfillment.state} {order.fulfillment.postal_code}
                 </address>
+                <span>
+                  {(order.fulfillment.distance_miles ?? 0).toFixed(1)} driving miles · {order.fulfillment.fee_cents
+                    ? `${formatMoney(order.fulfillment.fee_cents, order.fulfillment.currency ?? "USD")} delivery fee`
+                    : "Free delivery"}
+                </span>
                 {order.fulfillment.instructions && (
                   <p><strong>Instructions:</strong> {order.fulfillment.instructions}</p>
                 )}

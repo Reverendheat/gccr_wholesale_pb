@@ -8,12 +8,14 @@ import {
   fetchOrders,
   fetchScheduledOrders,
   cancelScheduledOrder,
+  quoteFulfillment,
   type CatalogItem,
   type CatalogVariation,
   type Order,
   type ScheduledOrder,
   type ScheduleFrequency,
   type Fulfillment,
+  type FulfillmentQuoteResult,
 } from "../lib/api";
 import "./CustomerPortal.css";
 
@@ -40,6 +42,27 @@ function formatDate(iso: string): string {
   // PocketBase returns "2006-01-02 15:04:05.000Z" — replace the space with T
   // so the JS Date constructor parses it correctly across all browsers.
   return new Date(iso.replace(" ", "T")).toLocaleDateString();
+}
+
+function validateFulfillment(fulfillment: Fulfillment): string | null {
+  if (fulfillment.method === "pickup") return null;
+  if (
+    !fulfillment.recipient_name?.trim() ||
+    !fulfillment.recipient_phone?.trim() ||
+    !fulfillment.address_line_1?.trim() ||
+    !fulfillment.city?.trim() ||
+    !fulfillment.state?.trim() ||
+    !fulfillment.postal_code?.trim()
+  ) {
+    return "Complete all required delivery fields.";
+  }
+  if (!/^[A-Za-z]{2}$/.test(fulfillment.state.trim())) {
+    return "Use a two-letter state code.";
+  }
+  if (!/^\d{5}(-\d{4})?$/.test(fulfillment.postal_code.trim())) {
+    return "Use a valid US ZIP code.";
+  }
+  return null;
 }
 
 function VariationTag({
@@ -89,6 +112,9 @@ export default function CustomerPortal() {
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [deliveryQuote, setDeliveryQuote] = useState<{ key: string; result: FulfillmentQuoteResult } | null>(null);
+  const [quotingDeliveryKey, setQuotingDeliveryKey] = useState<string | null>(null);
+  const [deliveryQuoteError, setDeliveryQuoteError] = useState<{ key: string; message: string } | null>(null);
 
   // Schedule mode state
   const [scheduleMode, setScheduleMode] = useState(false);
@@ -151,27 +177,6 @@ export default function CustomerPortal() {
     setFulfillment((current) => ({ ...current, [field]: value }));
   }
 
-  function validateFulfillment(): string | null {
-    if (fulfillment.method === "pickup") return null;
-    if (
-      !fulfillment.recipient_name?.trim() ||
-      !fulfillment.recipient_phone?.trim() ||
-      !fulfillment.address_line_1?.trim() ||
-      !fulfillment.city?.trim() ||
-      !fulfillment.state?.trim() ||
-      !fulfillment.postal_code?.trim()
-    ) {
-      return "Complete all required delivery fields.";
-    }
-    if (!/^[A-Za-z]{2}$/.test(fulfillment.state.trim())) {
-      return "Use a two-letter state code.";
-    }
-    if (!/^\d{5}(-\d{4})?$/.test(fulfillment.postal_code.trim())) {
-      return "Use a valid US ZIP code.";
-    }
-    return null;
-  }
-
   function startEditingOrder(order: Order) {
     const nextCart: CartItem[] = [];
     for (const lineItem of order.lineItems) {
@@ -222,9 +227,13 @@ export default function CustomerPortal() {
 
   async function handleSubmitOrder() {
     if (cart.length === 0) return;
-    const fulfillmentError = validateFulfillment();
+    const fulfillmentError = validateFulfillment(fulfillment);
     if (fulfillmentError) {
       setError(fulfillmentError);
+      return;
+    }
+    if (fulfillment.method === "delivery" && !activeDeliveryQuote) {
+      setError(activeDeliveryQuoteError ?? "Wait for a valid delivery quote before submitting.");
       return;
     }
     setSubmitting(true);
@@ -258,9 +267,13 @@ export default function CustomerPortal() {
 
   async function handleSubmitScheduledOrder() {
     if (cart.length === 0) return;
-    const fulfillmentError = validateFulfillment();
+    const fulfillmentError = validateFulfillment(fulfillment);
     if (fulfillmentError) {
       setError(fulfillmentError);
+      return;
+    }
+    if (fulfillment.method === "delivery" && !activeDeliveryQuote) {
+      setError(activeDeliveryQuoteError ?? "Wait for a valid delivery quote before scheduling.");
       return;
     }
     setSubmitting(true);
@@ -308,6 +321,47 @@ export default function CustomerPortal() {
     const price = c.variation.item_variation_data.price_money?.amount ?? 0;
     return sum + price * c.quantity;
   }, 0);
+
+  const deliveryQuoteKey = JSON.stringify({
+    items: cart.map((item) => [item.variation.id, item.quantity]),
+    fulfillment,
+  });
+  const activeDeliveryQuote = deliveryQuote?.key === deliveryQuoteKey ? deliveryQuote.result : null;
+  const activeDeliveryQuoteError = deliveryQuoteError?.key === deliveryQuoteKey ? deliveryQuoteError.message : null;
+  const quotingDelivery = quotingDeliveryKey === deliveryQuoteKey;
+
+  useEffect(() => {
+    if (fulfillment.method !== "delivery" || cart.length === 0 || validateFulfillment(fulfillment)) return;
+
+    const requestKey = deliveryQuoteKey;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setQuotingDeliveryKey(requestKey);
+      try {
+        const quote = await quoteFulfillment(
+          cart.map((item) => ({ variation_id: item.variation.id, quantity: item.quantity })),
+          fulfillment,
+          controller.signal,
+        );
+        setDeliveryQuote({ key: requestKey, result: quote });
+      } catch (quoteError: unknown) {
+        if (quoteError instanceof DOMException && quoteError.name === "AbortError") return;
+        setDeliveryQuoteError({
+          key: requestKey,
+          message: quoteError instanceof Error ? quoteError.message : "Could not calculate delivery quote",
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setQuotingDeliveryKey((current) => current === requestKey ? null : current);
+        }
+      }
+    }, 600);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [cart, deliveryQuoteKey, fulfillment]);
 
   // Build a lookup from variation ID → readable name for the orders tab.
   const variationNames: Record<string, string> = {};
@@ -434,7 +488,14 @@ export default function CustomerPortal() {
 
                   {cartTotal > 0 && (
                     <div className="cart-total">
-                      Estimated total: {formatPrice(cartTotal)}
+                      <div>Merchandise subtotal: {formatPrice(cartTotal)}</div>
+                      {activeDeliveryQuote && (
+                        <>
+                          <div>Delivery fee: {formatPrice(activeDeliveryQuote.fulfillment.fee_cents ?? 0)}</div>
+                          <div>Estimated total: {formatPrice(activeDeliveryQuote.total_cents)}</div>
+                        </>
+                      )}
+                      {fulfillment.method === "pickup" && <div>Estimated total: {formatPrice(cartTotal)}</div>}
                     </div>
                   )}
 
@@ -531,7 +592,16 @@ export default function CustomerPortal() {
                             rows={2}
                           />
                         </label>
-                        <p className="delivery-country">United States addresses only</p>
+                        <p className="delivery-country">United States addresses only · maximum 30 driving miles</p>
+                        {quotingDelivery && <p className="delivery-quote pending">Calculating driving distance…</p>}
+                        {activeDeliveryQuoteError && <p className="delivery-quote error">{activeDeliveryQuoteError}</p>}
+                        {activeDeliveryQuote && (
+                          <p className="delivery-quote success">
+                            {activeDeliveryQuote.fulfillment.distance_miles?.toFixed(1)} driving miles · {activeDeliveryQuote.fulfillment.fee_cents
+                              ? `${formatPrice(activeDeliveryQuote.fulfillment.fee_cents)} delivery fee`
+                              : "Free delivery"}
+                          </p>
+                        )}
                       </div>
                     )}
                   </section>
@@ -587,7 +657,7 @@ export default function CustomerPortal() {
                     <button
                       className="cart-submit cart-submit-schedule"
                       onClick={handleSubmitScheduledOrder}
-                      disabled={submitting}
+                      disabled={submitting || (fulfillment.method === "delivery" && (!activeDeliveryQuote || quotingDelivery))}
                     >
                       {submitting
                         ? "Scheduling…"
@@ -598,7 +668,7 @@ export default function CustomerPortal() {
                       <button
                         className="cart-submit"
                         onClick={handleSubmitOrder}
-                        disabled={submitting}
+                        disabled={submitting || (fulfillment.method === "delivery" && (!activeDeliveryQuote || quotingDelivery))}
                       >
                         {submitting
                           ? editingOrderId ? "Saving changes…" : "Placing order…"
@@ -684,10 +754,17 @@ export default function CustomerPortal() {
                                   {o.fulfillment?.method === "delivery" ? "Delivery" : "Pickup"}
                                 </li>
                                 {o.fulfillment?.method === "delivery" && o.fulfillment.address_line_1 && (
-                                  <li>
-                                    {o.fulfillment.address_line_1}
-                                    {o.fulfillment.address_line_2 ? `, ${o.fulfillment.address_line_2}` : ""}, {o.fulfillment.city}, {o.fulfillment.state} {o.fulfillment.postal_code}
-                                  </li>
+                                  <>
+                                    <li>
+                                      {o.fulfillment.address_line_1}
+                                      {o.fulfillment.address_line_2 ? `, ${o.fulfillment.address_line_2}` : ""}, {o.fulfillment.city}, {o.fulfillment.state} {o.fulfillment.postal_code}
+                                    </li>
+                                    <li>
+                                      {(o.fulfillment.distance_miles ?? 0).toFixed(1)} driving miles · {o.fulfillment.fee_cents
+                                        ? `${formatPrice(o.fulfillment.fee_cents)} delivery fee`
+                                        : "Free delivery"}
+                                    </li>
+                                  </>
                                 )}
                                 {o.lineItems.map((li, i) => (
                                   <li key={i}>

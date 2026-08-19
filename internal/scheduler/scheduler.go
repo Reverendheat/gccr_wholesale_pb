@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/reverendheat/gccr_invoice/internal/delivery"
 	"github.com/reverendheat/gccr_invoice/internal/orders"
 	"github.com/reverendheat/gccr_invoice/internal/orders/fsm"
 	"github.com/reverendheat/gccr_invoice/internal/square"
@@ -15,9 +16,9 @@ import (
 
 // Register wires a cron job that fires every 30 minutes and creates any
 // scheduled orders that are due.
-func Register(app core.App, sq *square.Client, locationID string) {
+func Register(app core.App, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) {
 	app.Cron().MustAdd("scheduledOrders", "*/30 * * * *", func() {
-		if err := process(app, sq, locationID); err != nil {
+		if err := process(app, sq, locationID, deliveryQuoter); err != nil {
 			log.Printf("scheduled orders cron: %v", err)
 		}
 	})
@@ -31,7 +32,7 @@ func Register(app core.App, sq *square.Client, locationID string) {
 
 // process finds all active scheduled orders whose next_run_at is in the past
 // (or now), creates an order for each, and advances next_run_at.
-func process(app core.App, sq *square.Client, locationID string) error {
+func process(app core.App, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) error {
 	due, err := app.FindRecordsByFilter(
 		"scheduledOrders",
 		"active = true && next_run_at <= @now",
@@ -42,7 +43,7 @@ func process(app core.App, sq *square.Client, locationID string) error {
 	}
 
 	for _, sr := range due {
-		if err := processOne(app, sq, locationID, sr); err != nil {
+		if err := processOne(app, sq, locationID, deliveryQuoter, sr); err != nil {
 			log.Printf("scheduled order %s: %v", sr.Id, err)
 		}
 	}
@@ -51,7 +52,7 @@ func process(app core.App, sq *square.Client, locationID string) error {
 
 // processOne creates a single order for one scheduledOrders record and
 // advances its next_run_at timestamp.
-func processOne(app core.App, sq *square.Client, locationID string, sr *core.Record) error {
+func processOne(app core.App, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter, sr *core.Record) error {
 	ctx := context.Background()
 	var err error
 
@@ -88,6 +89,10 @@ func processOne(app core.App, sq *square.Client, locationID string, sr *core.Rec
 	items, err = orders.LockPrices(ctx, sq, locationID, items)
 	if err != nil {
 		return fmt.Errorf("lock order pricing: %w", err)
+	}
+	fulfillment, _, err = orders.QuoteFulfillment(ctx, deliveryQuoter, fulfillment, items)
+	if err != nil {
+		return fmt.Errorf("quote fulfillment: %w", err)
 	}
 
 	pbOrder, err := orders.Create(

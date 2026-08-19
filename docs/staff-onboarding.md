@@ -84,7 +84,7 @@ Open **Orders**, then select row to view details:
 - Customer information
 - Local order ID; Square order ID after invoicing
 - Item variations, locked submission prices, and quantities
-- Pickup or delivery details, including snapshotted address and instructions
+- Pickup or delivery details, including snapshotted address, driving distance, fee, and instructions
 - Notes
 - Current status
 - Invoice information
@@ -114,7 +114,7 @@ From order detail:
 
 1. Review customer, fulfillment details, locked prices, items, notes, and status.
 2. Select **Send invoice**.
-3. Application creates Square order from locked local snapshot, then creates invoice due 30 days from current date.
+3. Application creates Square order from locked local snapshot, adds any `Local delivery` fee line, then creates invoice due 30 days from current date.
 4. Square emails payment request to customer.
 5. Invoice link appears in order detail and **Invoices** tab.
 6. Square webhook updates local status after payment, cancellation, or refund.

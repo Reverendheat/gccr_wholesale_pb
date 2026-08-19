@@ -106,6 +106,11 @@ SQUARE_SANDBOX=false
 SQUARE_WEBHOOK_URL=https://wholesale.example.com/api/webhooks/square
 SQUARE_WEBHOOK_SIGNATURE_KEY=...
 
+ORS_API_KEY=...
+DELIVERY_MAX_MILES=30
+DELIVERY_FREE_MINIMUM_CENTS=10000
+DELIVERY_RATE_CENTS_PER_MILE=50
+
 PB_APP_NAME=GCCR Wholesale
 PB_APP_URL=https://wholesale.example.com
 PB_SENDER_NAME=GCCR Wholesale
@@ -122,6 +127,8 @@ PB_SMTP_TLS=false
 
 `SQUARE_SANDBOX=true` uses Square sandbox. Sandbox and production use different access tokens, location IDs, customer records, category IDs, and catalog records.
 
+`ORS_API_KEY` is server-only OpenRouteService credential used for delivery address geocoding and driving routes. Square location selected by `SQUARE_LOCATION_ID` must have coordinates or complete physical address. Delivery is limited to `DELIVERY_MAX_MILES`. Orders below merchandise subtotal `DELIVERY_FREE_MINIMUM_CENTS` pay `ceil(driving miles) × DELIVERY_RATE_CENTS_PER_MILE`; defaults are 30 miles, $100, and $0.50/mile.
+
 SMTP is required for:
 
 - Staff one-time sign-in codes
@@ -137,7 +144,7 @@ In Square Developer Dashboard:
 3. Put webhook signature key in `SQUARE_WEBHOOK_SIGNATURE_KEY`.
 4. Ensure webhook environment matches `SQUARE_SANDBOX`.
 
-GCCR Wholesale owns submitted order contents and fulfillment workflow. Submission locks catalog prices locally; Square order and invoice are created together when staff sends invoice. Square owns billing state: payment marks local order `paid`, cancellation marks it `cancelled`, and refunds require `needs_review`. Do not edit Square order line items directly. Invoice polling runs every 15 minutes as fallback for missed payment or cancellation webhooks.
+GCCR Wholesale owns submitted order contents and fulfillment workflow. Submission locks catalog prices and authoritative delivery quote locally; Square order and invoice are created together when staff sends invoice. Charged delivery becomes a separate `Local delivery` Square line item. Square owns billing state: payment marks local order `paid`, cancellation marks it `cancelled`, and refunds require `needs_review`. Do not edit Square order line items directly. Invoice polling runs every 15 minutes as fallback for missed payment or cancellation webhooks.
 
 ## Initial provisioning
 
@@ -213,6 +220,7 @@ Required startup values:
 - `SQUARE_ACCESS_TOKEN`
 - `SQUARE_LOCATION_ID`
 - `SQUARE_WHOLESALE_CATEGORY_ID`
+- `ORS_API_KEY`
 
 Missing required value causes app restart loop with error in logs.
 

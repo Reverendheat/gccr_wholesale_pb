@@ -134,6 +134,17 @@ export interface Fulfillment {
   postal_code?: string;
   country?: "US";
   instructions?: string;
+  distance_meters?: number;
+  distance_miles?: number;
+  fee_cents?: number;
+  currency?: string;
+  pricing_rule?: string;
+}
+
+export interface FulfillmentQuoteResult {
+  fulfillment: Fulfillment;
+  subtotal_cents: number;
+  total_cents: number;
 }
 
 export interface Order {
@@ -187,6 +198,24 @@ export async function fetchWholesaleCatalog(): Promise<CatalogItem[]> {
   if (!res.ok) throw new Error(`Catalog fetch failed: ${res.status}`);
   const data = await res.json();
   return data.items ?? [];
+}
+
+export async function quoteFulfillment(
+  lineItems: LineItemInput[],
+  fulfillment: Fulfillment,
+  signal?: AbortSignal,
+): Promise<FulfillmentQuoteResult> {
+  const res = await fetch(`${BASE}/fulfillment/quote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ lineItems, fulfillment }),
+    signal,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Delivery quote failed: ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function submitOrder(

@@ -12,6 +12,7 @@ import (
 	_ "github.com/reverendheat/gccr_invoice/pb_migrations"
 
 	"github.com/reverendheat/gccr_invoice/internal/config"
+	"github.com/reverendheat/gccr_invoice/internal/delivery"
 	"github.com/reverendheat/gccr_invoice/internal/hooks"
 	"github.com/reverendheat/gccr_invoice/internal/routes"
 	"github.com/reverendheat/gccr_invoice/internal/scheduler"
@@ -49,12 +50,27 @@ func main() {
 		log.Fatal("SQUARE_LOCATION_ID environment variable is required")
 	}
 
+	orsAPIKey := os.Getenv("ORS_API_KEY")
+	if orsAPIKey == "" {
+		log.Fatal("ORS_API_KEY environment variable is required")
+	}
+	deliveryPolicy, err := delivery.PolicyFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	sq := square.New(sqCfg)
+	deliveryService := delivery.NewService(
+		locationID,
+		sq,
+		delivery.NewOpenRouteService(orsAPIKey, "", nil),
+		deliveryPolicy,
+	)
 	hooks.Register(app, sq)
-	scheduler.Register(app, sq, locationID)
+	scheduler.Register(app, sq, locationID, deliveryService)
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		routes.Register(se, sq, locationID)
+		routes.Register(se, sq, locationID, deliveryService)
 		se.Router.GET("/{path...}", apis.Static(os.DirFS("./pb_public"), true))
 		return se.Next()
 	})

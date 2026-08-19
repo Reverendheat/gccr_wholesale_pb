@@ -59,11 +59,13 @@ Catalog is shared among customers; it is not customized by company account. Cont
 2. Adjust quantities.
 3. Choose **Pickup** or **Delivery**. Pickup is selected by default.
 4. For delivery, enter recipient, US delivery address, and optional delivery instructions.
-5. Add order notes or special requests if needed.
-6. Select **Place Order**.
-7. Wait for success confirmation.
+5. Wait for driving-distance quote. Delivery is available within 30 driving miles.
+6. Review delivery fee and estimated total. Merchandise orders of $100 or more receive free delivery; smaller orders pay $0.50 per started driving mile.
+7. Add order notes or special requests if needed.
+8. Select **Place Order**.
+9. Wait for success confirmation.
 
-Order is created in GCCR Wholesale with catalog pricing locked at submission. New order starts as `pending`. Square order and invoice are created later when staff sends invoice. Delivery details remain in GCCR Wholesale for fulfillment. Address checks validate required fields and US ZIP format, not real-world deliverability.
+Order is created in GCCR Wholesale with catalog pricing and delivery quote locked at submission. New order starts as `pending`. Square order and invoice are created later when staff sends invoice; any delivery fee appears as separate invoice line. Delivery address, driving distance, and fee remain snapshotted for fulfillment.
 
 Open **Account Orders** to view orders submitted by you and other members of your wholesale account:
 
@@ -87,7 +89,7 @@ Select order row to expand item details. Order creator can select **Edit order**
    - Quarterly
 4. Select schedule button.
 
-First order is placed immediately. Future orders are created automatically on shown next-order date using fulfillment details saved when schedule was created. Each generated order locks wholesale catalog pricing in effect on its creation date.
+First order is placed immediately. Future orders are created automatically on shown next-order date using fulfillment details saved when schedule was created. Each generated order locks wholesale catalog pricing and recalculates delivery eligibility and fee in effect on its creation date.
 
 Open **Account Schedules** to see active schedules, creators, frequencies, and next dates for your wholesale account.
 
