@@ -14,7 +14,7 @@ A push to `main` triggers `.github/workflows/build-push.yml`. GitHub Actions bui
 - `ghcr.io/reverendheat/gccr_wholesale_pb:latest`
 - `ghcr.io/reverendheat/gccr_wholesale_pb:sha-<7-character-commit>`
 
-Deployments are completed manually on server with `scripts/deploy.sh`.
+After publishing images, GitHub Actions connects to production VM over SSH and runs `scripts/deploy.sh`.
 
 ## First-deployment prerequisites
 
@@ -66,6 +66,32 @@ Provision these parameters under `/wholesale`:
 Current setup script fetches `/wholesale/env` without `--with-decryption`, so it must currently be a String. It still contains secrets: tightly restrict SSM and IAM access. Do not commit production `.env`.
 
 GitHub token needs read access to repository contents and packages.
+
+### GitHub Actions deployment secrets
+
+Configure these repository or production-environment secrets in GitHub:
+
+| Secret | Required | Purpose |
+|---|---|---|
+| `DEPLOY_HOST` | Yes | VM hostname or public IP |
+| `DEPLOY_USER` | Yes | SSH user, typically `ubuntu` |
+| `DEPLOY_SSH_KEY` | Yes | Private key authorized for deployment user |
+| `DEPLOY_KNOWN_HOSTS` | Yes | Pinned VM SSH host key entry |
+| `DEPLOY_SSH_PORT` | No | SSH port; defaults to `22` |
+
+Create `DEPLOY_KNOWN_HOSTS` from a trusted host-key fingerprint. Verify fingerprint through cloud console or another trusted channel before saving output:
+
+```bash
+ssh-keyscan -p 22 your-vm.example.com
+```
+
+Deployment user must access `/opt/gccr_wholesale_pb` and run deployment script as root without an interactive password. Restrict passwordless sudo to that script, for example:
+
+```sudoers
+ubuntu ALL=(root) NOPASSWD: /usr/bin/bash /opt/gccr_wholesale_pb/scripts/deploy.sh
+```
+
+GitHub Actions uses `sudo -n`, so deployment fails instead of hanging when sudo is not configured correctly.
 
 ### Production environment
 
@@ -147,14 +173,8 @@ Open application at `https://wholesale.example.com/`. From allowed admin IP, ope
 ## Deploying application updates
 
 1. Commit changes and push to `main`.
-2. Wait for GitHub Action **Build & Push Docker Image** to finish successfully.
-3. Connect to host and run:
-
-```bash
-cd /opt/gccr_wholesale_pb
-sudo bash scripts/deploy.sh
-```
-
+2. GitHub Action **Build & Push Docker Image** builds and publishes image.
+3. Its `deploy` job connects to VM and runs `/opt/gccr_wholesale_pb/scripts/deploy.sh`.
 4. Verify:
 
 ```bash
@@ -163,7 +183,15 @@ sudo docker compose logs --tail=100 app
 curl -fsS https://wholesale.example.com/api/health
 ```
 
-`deploy.sh` pulls Git configuration and latest image, recreates changed containers, and prunes old images. No machine reboot is required.
+`deploy.sh` pulls Git configuration and latest image, recreates changed containers, and prunes old images. No machine reboot is required. Workflow fails if SSH, host-key verification, passwordless sudo, or deployment script fails.
+
+For manual fallback:
+
+```bash
+ssh ubuntu@your-vm.example.com
+cd /opt/gccr_wholesale_pb
+sudo bash scripts/deploy.sh
+```
 
 ## Updating environment variables
 
