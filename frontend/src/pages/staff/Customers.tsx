@@ -8,7 +8,9 @@ import {
   type CompanyRecord,
   type CustomerRecord,
   type SquareCustomerPreview,
+  type StaffOrderResult,
 } from "../../lib/api";
+import StaffOrderModal from "./StaffOrderModal";
 import "./Orders.css";
 
 function formatDate(iso: string): string {
@@ -155,6 +157,7 @@ export default function Customers() {
   const [showInvite, setShowInvite] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [orderingFor, setOrderingFor] = useState<CustomerRecord | null>(null);
 
   useEffect(() => {
     Promise.all([fetchCustomers(), fetchCompanies()])
@@ -178,6 +181,14 @@ export default function Customers() {
     recordCompany(customer.expand?.company);
     setSuccessMsg(`Invite sent to ${customer.email}. They can sign in using a one-time code.`);
     setTimeout(() => setSuccessMsg(null), 6000);
+  }
+
+  function handleOrderCreated(result: StaffOrderResult) {
+    const customerName = orderingFor?.name || orderingFor?.email || "customer";
+    setSuccessMsg(result.notification_sent
+      ? `Order created for ${customerName}; confirmation email sent.`
+      : `Order created for ${customerName}, but confirmation email could not be sent.`);
+    setTimeout(() => setSuccessMsg(null), 7000);
   }
 
   async function saveAccountSelection(
@@ -254,6 +265,7 @@ export default function Customers() {
               <th>Phone</th>
               <th>Square ID</th>
               <th>Registered</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -290,10 +302,23 @@ export default function Customers() {
                   {customer.squareCustomerId ? `${customer.squareCustomerId.slice(0, 12)}…` : "—"}
                 </td>
                 <td data-label="Registered">{formatDate(customer.created)}</td>
+                <td className="customer-actions" data-label="Actions">
+                  <button type="button" onClick={() => setOrderingFor(customer)} disabled={!customer.squareCustomerId}>
+                    Create order
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {orderingFor && (
+        <StaffOrderModal
+          customer={orderingFor}
+          onClose={() => setOrderingFor(null)}
+          onCreated={handleOrderCreated}
+        />
       )}
 
       {showInvite && (

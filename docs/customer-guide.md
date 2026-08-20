@@ -67,6 +67,8 @@ Catalog is shared among customers; it is not customized by company account. Cont
 
 Order is created in GCCR Wholesale with catalog pricing and delivery quote locked at submission. New order starts as `pending`. Square order and invoice are created later when staff sends invoice; any delivery fee appears as separate invoice line. Delivery address, driving distance, and fee remain snapshotted for fulfillment.
 
+GCCR staff can also enter a one-time order after receiving authorization by phone, email, or another channel. Staff-entered orders appear immediately, are labeled **GCCR staff**, and trigger a confirmation email. Staff may make authorized corrections to pending or confirmed orders before Square invoice creation; updated catalog prices and delivery are recalculated and another confirmation email is sent. Contact GCCR promptly if anything needs correction. Customers cannot edit staff-entered orders in the portal.
+
 Open **Account Orders** to view orders submitted by you and other members of your wholesale account:
 
 - Order number, date, and submitter

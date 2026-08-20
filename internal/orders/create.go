@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/reverendheat/gccr_invoice/internal/square"
@@ -22,6 +23,28 @@ type LineItem struct {
 	Note           string `json:"note"`
 	UnitPriceCents int64  `json:"unit_price_cents"`
 	Currency       string `json:"currency"`
+}
+
+const (
+	ActorCustomer = "customer"
+	ActorStaff    = "staff"
+)
+
+type Actor struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type Placement struct {
+	Actor Actor
+	Note  string
+}
+
+type EditAudit struct {
+	Actor    Actor  `json:"actor"`
+	Reason   string `json:"reason"`
+	EditedAt string `json:"edited_at"`
 }
 
 // MerchandiseSubtotal returns locked merchandise total before fulfillment fees.
@@ -111,14 +134,43 @@ func LockPrices(ctx context.Context, sq *square.Client, locationID string, reque
 	return locked, nil
 }
 
-// Create saves a local order. Square order creation is intentionally delayed
-// until staff sends the invoice.
+// Create saves a legacy local order without an explicit placement actor.
 func Create(
 	app core.App,
 	customerID, companyID string,
 	items []LineItem,
 	fulfillment Fulfillment,
 	notes string,
+) (*core.Record, error) {
+	return create(app, customerID, companyID, items, fulfillment, notes, Placement{})
+}
+
+// CreateWithPlacement saves an order with immutable actor audit details.
+func CreateWithPlacement(
+	app core.App,
+	customerID, companyID string,
+	items []LineItem,
+	fulfillment Fulfillment,
+	notes string,
+	placement Placement,
+) (*core.Record, error) {
+	if placement.Actor.Type != ActorCustomer && placement.Actor.Type != ActorStaff {
+		return nil, fmt.Errorf("placement actor type must be customer or staff")
+	}
+	if placement.Actor.ID == "" || strings.TrimSpace(placement.Actor.Name) == "" {
+		return nil, fmt.Errorf("placement actor requires id and name")
+	}
+	placement.Note = strings.TrimSpace(placement.Note)
+	return create(app, customerID, companyID, items, fulfillment, notes, placement)
+}
+
+func create(
+	app core.App,
+	customerID, companyID string,
+	items []LineItem,
+	fulfillment Fulfillment,
+	notes string,
+	placement Placement,
 ) (*core.Record, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("at least one line item is required")
@@ -141,6 +193,10 @@ func Create(
 	pbOrder.Set("fulfillment", fulfillment)
 	pbOrder.Set("notes", notes)
 	pbOrder.Set("lineItems", items)
+	if placement.Actor.Type != "" {
+		pbOrder.Set("placedBy", placement.Actor)
+		pbOrder.Set("placementNote", placement.Note)
+	}
 
 	if err := app.Save(pbOrder); err != nil {
 		return nil, fmt.Errorf("save order: %w", err)
@@ -186,6 +242,61 @@ func UpdatePending(
 	updated, err := app.FindRecordById("orders", order.Id)
 	if err != nil {
 		return nil, fmt.Errorf("refresh pending order: %w", err)
+	}
+	return updated, nil
+}
+
+// UpdateByStaff replaces a pending or confirmed order before Square submission.
+func UpdateByStaff(
+	app core.App,
+	order *core.Record,
+	items []LineItem,
+	fulfillment Fulfillment,
+	notes string,
+	audit EditAudit,
+) (*core.Record, error) {
+	status := order.GetString("status")
+	if (status != "pending" && status != "confirmed") ||
+		order.GetString("squareOrderId") != "" ||
+		order.GetString("squareInvoiceId") != "" {
+		return nil, fmt.Errorf("staff can only edit pending or confirmed orders before Square submission")
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("at least one line item is required")
+	}
+	for _, item := range items {
+		if item.VariationID == "" || item.Quantity <= 0 || item.Currency == "" {
+			return nil, fmt.Errorf("line items require variation, positive quantity, and locked currency")
+		}
+	}
+	if audit.Actor.Type != ActorStaff || audit.Actor.ID == "" || strings.TrimSpace(audit.Actor.Name) == "" {
+		return nil, fmt.Errorf("staff edit requires staff actor")
+	}
+	audit.Reason = strings.TrimSpace(audit.Reason)
+	if audit.Reason == "" {
+		return nil, fmt.Errorf("staff edit reason is required")
+	}
+	if audit.EditedAt == "" {
+		audit.EditedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	var history []EditAudit
+	if order.GetString("editHistory") != "" {
+		if err := order.UnmarshalJSONField("editHistory", &history); err != nil {
+			return nil, fmt.Errorf("decode order edit history: %w", err)
+		}
+	}
+	history = append(history, audit)
+	order.Set("lineItems", items)
+	order.Set("fulfillment", fulfillment)
+	order.Set("notes", notes)
+	order.Set("editHistory", history)
+	if err := app.Save(order); err != nil {
+		return nil, fmt.Errorf("save staff order edit: %w", err)
+	}
+	updated, err := app.FindRecordById("orders", order.Id)
+	if err != nil {
+		return nil, fmt.Errorf("refresh staff-edited order: %w", err)
 	}
 	return updated, nil
 }

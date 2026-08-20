@@ -105,6 +105,38 @@ func TestFulfillmentMigrationAddsOrderAndScheduleSnapshots(t *testing.T) {
 	}
 }
 
+func TestOrderPlacementAuditFieldsExist(t *testing.T) {
+	app := pocketbase.NewWithConfig(pocketbase.Config{DefaultDataDir: t.TempDir(), HideStartBanner: true})
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+	defer app.ResetBootstrapState()
+	if err := app.RunAppMigrations(); err != nil {
+		t.Fatalf("run app migrations: %v", err)
+	}
+
+	orders, err := app.FindCollectionByNameOrId("orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"placedBy", "placementNote", "editHistory"} {
+		if orders.Fields.GetByName(field) == nil {
+			t.Fatalf("orders.%s field missing", field)
+		}
+	}
+	placementNote, ok := orders.Fields.GetByName("placementNote").(*core.TextField)
+	if !ok || !placementNote.Hidden {
+		t.Fatal("orders.placementNote must be hidden from collection API responses")
+	}
+	editHistory, ok := orders.Fields.GetByName("editHistory").(*core.JSONField)
+	if !ok || !editHistory.Hidden {
+		t.Fatal("orders.editHistory must be hidden from collection API responses")
+	}
+	if orders.UpdateRule != nil {
+		t.Fatalf("orders direct update rule must be locked, got %q", *orders.UpdateRule)
+	}
+}
+
 func TestAuthEmailLookupIsCaseInsensitive(t *testing.T) {
 	app := pocketbase.NewWithConfig(pocketbase.Config{
 		DefaultDataDir:  t.TempDir(),

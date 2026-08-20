@@ -39,16 +39,19 @@ func TestCustomerCanEditOnlyOwnPendingOrder(t *testing.T) {
 		customerID string
 		ownerID    string
 		status     string
+		actorType  string
 		want       bool
 	}{
-		{name: "own pending order", customerID: "customer1", ownerID: "customer1", status: "pending", want: true},
-		{name: "account peer pending order", customerID: "customer1", ownerID: "customer2", status: "pending", want: false},
-		{name: "own confirmed order", customerID: "customer1", ownerID: "customer1", status: "confirmed", want: false},
+		{name: "own pending order", customerID: "customer1", ownerID: "customer1", status: "pending", actorType: "customer", want: true},
+		{name: "legacy own pending order", customerID: "customer1", ownerID: "customer1", status: "pending", want: true},
+		{name: "staff-created pending order", customerID: "customer1", ownerID: "customer1", status: "pending", actorType: "staff", want: false},
+		{name: "account peer pending order", customerID: "customer1", ownerID: "customer2", status: "pending", actorType: "customer", want: false},
+		{name: "own confirmed order", customerID: "customer1", ownerID: "customer1", status: "confirmed", actorType: "customer", want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := customerCanEditOrder(tt.customerID, tt.ownerID, tt.status); got != tt.want {
+			if got := customerCanEditOrder(tt.customerID, tt.ownerID, tt.status, tt.actorType); got != tt.want {
 				t.Fatalf("customerCanEditOrder() = %v, want %v", got, tt.want)
 			}
 		})

@@ -728,7 +728,10 @@ export default function CustomerPortal() {
                       >
                         <td className="mono">{o.id.slice(0, 8)}</td>
                         <td>{formatDate(o.created)}</td>
-                        <td>{o.submittedBy?.name || "Unknown"}</td>
+                        <td>
+                          {o.submittedBy?.name || "Unknown"}
+                          {o.submittedBy?.type === "staff" && " (GCCR staff)"}
+                        </td>
                         <td>{o.lineItems.length} item(s)</td>
                         <td>
                           <span className={`status-badge status-${o.status}`}>
@@ -756,6 +759,10 @@ export default function CustomerPortal() {
                           <td colSpan={6}>
                             <div className="order-detail">
                               <ul className="order-detail-items">
+                                <li>
+                                  <strong>Placed by:</strong>{" "}
+                                  {o.placedBy?.type === "staff" ? `${o.placedBy.name} (GCCR staff)` : (o.submittedBy?.name || "Customer")}
+                                </li>
                                 <li>
                                   <strong>Fulfillment:</strong>{" "}
                                   {o.fulfillment?.method === "delivery" ? "Delivery" : "Pickup"}
@@ -791,7 +798,7 @@ export default function CustomerPortal() {
                                   <strong>Notes:</strong> {o.notes}
                                 </p>
                               )}
-                              {o.customer === user?.id && o.status === "pending" && (
+                              {o.customer === user?.id && o.status === "pending" && (o.placedBy?.type ?? "customer") === "customer" && (
                                 <button
                                   className="btn-edit-order"
                                   onClick={() => startEditingOrder(o)}

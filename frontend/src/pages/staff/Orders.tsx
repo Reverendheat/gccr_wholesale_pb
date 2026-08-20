@@ -3,9 +3,12 @@ import {
   fetchStaffOrders,
   sendInvoice,
   sendOrderEvent,
+  type CustomerRecord,
   type Order,
   type OrderEvent,
+  type StaffOrderResult,
 } from "../../lib/api";
+import StaffOrderModal from "./StaffOrderModal";
 import "./Orders.css";
 
 function formatDate(iso: string): string {
@@ -42,10 +45,12 @@ function OrderDrawer({
   order,
   onClose,
   onOrderUpdate,
+  onEdit,
 }: {
   order: Order;
   onClose: () => void;
   onOrderUpdate: (updated: Order) => void;
+  onEdit: () => void;
 }) {
   const [savingEvent, setSavingEvent] = useState<OrderEvent | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -82,6 +87,10 @@ function OrderDrawer({
   const canSendInvoice =
     !order.squareInvoiceId &&
     !["paid", "cancelled", "needs_review"].includes(order.status);
+  const canEdit =
+    ["pending", "confirmed"].includes(order.status) &&
+    !order.squareOrderId &&
+    !order.squareInvoiceId;
 
   return (
     <>
@@ -123,6 +132,14 @@ function OrderDrawer({
                   ) : (
                     <span className="mono">{order.customer.slice(0, 8)}</span>
                   )}
+                </span>
+              </div>
+              <div className="meta-row">
+                <span className="meta-label">Placed by</span>
+                <span>
+                  {order.placedBy?.name || order.submittedBy?.name || "Unknown"}
+                  {order.placedBy?.type === "staff" && " (staff)"}
+                  {order.placementReason && <><br /><span className="meta-sub">{order.placementReason}</span></>}
                 </span>
               </div>
               {order.squareOrderId && (
@@ -197,6 +214,18 @@ function OrderDrawer({
             </table>
           </section>
 
+          {order.staffEditHistory && order.staffEditHistory.length > 0 && (
+            <section className="drawer-section">
+              <h4 className="drawer-section-title">Edit history</h4>
+              {order.staffEditHistory.map((edit, index) => (
+                <p className="drawer-notes" key={`${edit.edited_at}-${index}`}>
+                  <strong>{edit.actor.name}</strong> · {formatDate(edit.edited_at)}<br />
+                  {edit.reason}
+                </p>
+              ))}
+            </section>
+          )}
+
           {/* Notes */}
           {order.notes && (
             <section className="drawer-section">
@@ -209,6 +238,11 @@ function OrderDrawer({
             <section className="drawer-section">
               <h4 className="drawer-section-title">Actions</h4>
               <div className="workflow-actions">
+                {canEdit && (
+                  <button className="btn-action" onClick={onEdit} disabled={savingEvent !== null}>
+                    Edit order
+                  </button>
+                )}
                 {actions.map((action) => (
                   <button
                     key={action.event}
@@ -278,6 +312,8 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Order | null>(null);
+  const [editing, setEditing] = useState<Order | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStaffOrders()
@@ -293,12 +329,21 @@ export default function Orders() {
     setSelected(updated);
   }
 
+  function handleStaffEdit(result: StaffOrderResult) {
+    handleOrderUpdate(result.order);
+    setSuccess(result.notification_sent
+      ? "Order updated and customer notified."
+      : "Order updated, but customer notification email failed.");
+    window.setTimeout(() => setSuccess(null), 6000);
+  }
+
   if (loading) return <p className="muted">Loading orders…</p>;
   if (error) return <p className="staff-error">{error}</p>;
 
   return (
     <div>
       <h2>Orders</h2>
+      {success && <p className="staff-success">{success}</p>}
       {orders.length === 0 ? (
         <p className="muted">No orders yet.</p>
       ) : (
@@ -354,6 +399,24 @@ export default function Orders() {
           order={selected}
           onClose={() => setSelected(null)}
           onOrderUpdate={handleOrderUpdate}
+          onEdit={() => setEditing(selected)}
+        />
+      )}
+
+      {editing?.expand?.customer && (
+        <StaffOrderModal
+          customer={{
+            id: editing.expand.customer.id,
+            name: editing.expand.customer.name,
+            email: editing.expand.customer.email,
+            phone: editing.expand.customer.phone,
+            squareCustomerId: "",
+            company: editing.company,
+            created: "",
+          } satisfies CustomerRecord}
+          order={editing}
+          onClose={() => setEditing(null)}
+          onUpdated={handleStaffEdit}
         />
       )}
     </div>

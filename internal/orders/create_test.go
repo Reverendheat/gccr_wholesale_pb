@@ -74,6 +74,29 @@ func TestCreateStoresLocalPricedOrderWithoutSquareOrder(t *testing.T) {
 	}
 }
 
+func TestCreateWithPlacementStoresStaffAudit(t *testing.T) {
+	app, customer := newOrderTestApp(t)
+	order, err := CreateWithPlacement(app, customer.Id, "", []LineItem{{
+		VariationID: "VAR1", Name: "Coffee", Quantity: 1, UnitPriceCents: 1250, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "customer note", Placement{
+		Actor: Actor{Type: ActorStaff, ID: "STAFF1", Name: "Jane Staff"},
+		Note:  "Phone order",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actor Actor
+	if err := order.UnmarshalJSONField("placedBy", &actor); err != nil {
+		t.Fatal(err)
+	}
+	if actor.Type != ActorStaff || actor.ID != "STAFF1" || actor.Name != "Jane Staff" {
+		t.Fatalf("placedBy = %+v", actor)
+	}
+	if order.GetString("placementNote") != "Phone order" {
+		t.Fatalf("placementNote = %q", order.GetString("placementNote"))
+	}
+}
+
 func TestUpdatePendingReplacesEditableOrderSnapshot(t *testing.T) {
 	app, customer := newOrderTestApp(t)
 	order, err := Create(app, customer.Id, "", []LineItem{{
@@ -108,6 +131,59 @@ func TestUpdatePendingReplacesEditableOrderSnapshot(t *testing.T) {
 	}
 	if fulfillment.Method != FulfillmentDelivery || fulfillment.AddressLine1 != "123 Main St" {
 		t.Fatalf("updated fulfillment = %+v", fulfillment)
+	}
+}
+
+func TestUpdateByStaffAllowsConfirmedPreSquareOrderAndAudits(t *testing.T) {
+	app, customer := newOrderTestApp(t)
+	order, err := CreateWithPlacement(app, customer.Id, "", []LineItem{{
+		VariationID: "VAR1", Name: "Coffee", Quantity: 1, UnitPriceCents: 1250, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "old note", Placement{
+		Actor: Actor{Type: ActorCustomer, ID: customer.Id, Name: "Customer"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order.Set("status", "confirmed")
+	if err := app.Save(order); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := UpdateByStaff(app, order, []LineItem{{
+		VariationID: "VAR2", Name: "Cold Brew Growler", Quantity: 2, UnitPriceCents: 1800, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "add growlers", EditAudit{
+		Actor:  Actor{Type: ActorStaff, ID: "STAFF1", Name: "Jane Staff"},
+		Reason: "Customer requested one more growler", EditedAt: "2026-08-20T12:00:00Z",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.GetString("status") != "confirmed" || updated.GetString("notes") != "add growlers" {
+		t.Fatalf("updated order = status %q notes %q", updated.GetString("status"), updated.GetString("notes"))
+	}
+	var history []EditAudit
+	if err := updated.UnmarshalJSONField("editHistory", &history); err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Actor.ID != "STAFF1" || history[0].Reason != "Customer requested one more growler" {
+		t.Fatalf("edit history = %+v", history)
+	}
+}
+
+func TestUpdateByStaffRejectsSquareSubmittedOrder(t *testing.T) {
+	app, customer := newOrderTestApp(t)
+	order, err := Create(app, customer.Id, "", []LineItem{{
+		VariationID: "VAR1", Name: "Coffee", Quantity: 1, UnitPriceCents: 1250, Currency: "USD",
+	}}, Fulfillment{Method: FulfillmentPickup}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	order.Set("squareOrderId", "SQ1")
+	if err := app.Save(order); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdateByStaff(app, order, []LineItem{{VariationID: "VAR1", Quantity: 2, UnitPriceCents: 1250, Currency: "USD"}}, Fulfillment{Method: FulfillmentPickup}, "", EditAudit{Actor: Actor{Type: ActorStaff, ID: "STAFF1", Name: "Jane"}, Reason: "change"}); err == nil {
+		t.Fatal("expected Square-submitted order edit to fail")
 	}
 }
 

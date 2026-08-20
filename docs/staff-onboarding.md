@@ -77,6 +77,30 @@ Customer signs in using one-time email code. No customer password is created for
 
 Welcome-email failure is logged after account creation and may not make invitation request fail. Customer can still open application and request OTP manually.
 
+## Place an order for a customer
+
+Use this workflow only after customer authorizes a one-time order by phone, email, or another channel:
+
+1. Open **Customers**.
+2. Find linked customer and select **Create order**.
+3. Add catalog items and quantities.
+4. Choose pickup or delivery. Delivery uses same configured driving-radius and fee rules as customer checkout.
+5. Enter required **Reason / authorization** note.
+6. Review customer, merchandise subtotal, delivery fee, and total.
+7. Confirm creation.
+
+Order starts `pending`, appears in customer account immediately, and records staff identity plus authorization note for audit. Customer receives confirmation email; UI warns staff if email delivery fails. Staff-entered orders are intentionally one-time only. Never impersonate customer or handle customer payment credentials.
+
+### Last-minute order corrections
+
+Staff can select **Edit order** for customer-created or staff-created orders when all are true:
+
+- Status is `pending` or `confirmed`
+- No Square order exists
+- No Square invoice exists
+
+Use this for authorized corrections such as adding an item before delivery leaves. Staff must enter edit reason. Application re-locks catalog prices, recalculates delivery, preserves order status, appends staff/timestamp/reason audit entry, and emails customer. Once sent to Square, cancel/recreate or use future add-on workflow instead; never change local totals behind published invoice.
+
 ## Manage orders
 
 Open **Orders**, then select row to view details:
@@ -85,6 +109,7 @@ Open **Orders**, then select row to view details:
 - Local order ID; Square order ID after invoicing
 - Item variations, locked submission prices, and quantities
 - Pickup or delivery details, including snapshotted address, driving distance, fee, and instructions
+- Placement actor and staff authorization note when applicable
 - Notes
 - Current status
 - Invoice information
@@ -101,7 +126,7 @@ Open **Orders**, then select row to view details:
 | `cancelled` | Order cancelled | No normal action |
 | `needs_review` | Square/local state requires manual review | Review records; UI allows cancellation |
 
-Do not manually edit status in PocketBase. Use staff actions so workflow validation remains intact.
+Do not manually edit records in PocketBase. Direct collection updates are locked; use staff actions and **Edit order** so workflow, price locking, delivery calculations, and audit history remain intact.
 
 ## Send an invoice
 

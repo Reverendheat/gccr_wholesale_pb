@@ -117,8 +117,21 @@ export interface LineItemInput {
 }
 
 export interface SubmittedBy {
+  type?: "customer" | "staff";
   id: string;
   name: string;
+}
+
+export interface PlacementActor {
+  type: "customer" | "staff";
+  id: string;
+  name: string;
+}
+
+export interface OrderEditAudit {
+  actor: PlacementActor;
+  reason: string;
+  edited_at: string;
 }
 
 export type FulfillmentMethod = "pickup" | "delivery";
@@ -158,6 +171,9 @@ export interface Order {
   customer: string;
   company: string;
   submittedBy?: SubmittedBy;
+  placedBy?: PlacementActor;
+  placementReason?: string;
+  staffEditHistory?: OrderEditAudit[];
   status: string;
   notes: string;
   fulfillment: Fulfillment;
@@ -226,6 +242,49 @@ export async function quoteFulfillment(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message ?? `Delivery quote failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface StaffOrderResult {
+  order: Order;
+  notification_sent: boolean;
+}
+
+export async function submitStaffOrder(
+  customerId: string,
+  lineItems: LineItemInput[],
+  notes: string,
+  fulfillment: Fulfillment,
+  placementNote: string,
+): Promise<StaffOrderResult> {
+  const res = await fetch(`${BASE}/customers/${customerId}/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ lineItems, notes, fulfillment, placementNote }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Staff order failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateStaffOrder(
+  id: string,
+  lineItems: LineItemInput[],
+  notes: string,
+  fulfillment: Fulfillment,
+  editReason: string,
+): Promise<StaffOrderResult> {
+  const res = await fetch(`${BASE}/orders/${id}/staff`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ lineItems, notes, fulfillment, editReason }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Staff order update failed: ${res.status}`);
   }
   return res.json();
 }

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"net/http"
 	"net/mail"
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -39,8 +41,9 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 	// GET /api/wholesale/orders — customers see own/account records; staff see all
 	g.GET("/orders", handleListOrders())
 
-	// PATCH /api/wholesale/orders/{id} — customer edits their own pending order
+	// Validated customer and staff order edits.
 	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID, deliveryCalculator))
+	g.PATCH("/orders/{id}/staff", handleStaffUpdateOrder(sq, locationID, deliveryCalculator))
 
 	// POST /api/wholesale/orders/{id}/events — staff applies a workflow event
 	g.POST("/orders/{id}/events", handleOrderEvent())
@@ -57,9 +60,10 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 	// POST /api/wholesale/invoices — staff sends a Square invoice for an order
 	g.POST("/invoices", handleSendInvoice(sq, locationID))
 
-	// Staff-controlled Square lookup and wholesale-account assignment.
+	// Staff-controlled customer operations.
 	g.POST("/customers/preview", handlePreviewCustomer(sq))
 	g.PATCH("/customers/{id}/account", handleAssignCustomerAccount())
+	g.POST("/customers/{id}/orders", handleCreateStaffOrder(sq, locationID, deliveryCalculator))
 
 	// POST /api/wholesale/invite — staff confirms account membership and invites a Square customer.
 	g.POST("/invite", handleInviteCustomer(sq))
@@ -88,9 +92,11 @@ type orderLineItemInput struct {
 }
 
 type createOrderBody struct {
-	LineItems   []orderLineItemInput `json:"lineItems"`
-	Notes       string               `json:"notes"`
-	Fulfillment orders.Fulfillment   `json:"fulfillment"`
+	LineItems     []orderLineItemInput `json:"lineItems"`
+	Notes         string               `json:"notes"`
+	Fulfillment   orders.Fulfillment   `json:"fulfillment"`
+	PlacementNote string               `json:"placementNote"`
+	EditReason    string               `json:"editReason"`
 }
 
 func validateLineItems(items []orderLineItemInput) error {
@@ -128,8 +134,8 @@ func handleFulfillmentOptions(deliveryCalculator delivery.Calculator) func(*core
 
 func handleFulfillmentQuote(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
-			return e.ForbiddenError("Only customers can request fulfillment quotes", nil)
+		if e.Auth == nil || (e.Auth.Collection().Name != "customers" && e.Auth.Collection().Name != "users") {
+			return e.ForbiddenError("Only customers or staff can request fulfillment quotes", nil)
 		}
 		var body createOrderBody
 		if err := e.BindBody(&body); err != nil {
@@ -199,14 +205,27 @@ func validateAccountSelection(companyID, newCompanyName string) error {
 	return nil
 }
 
+func actorForRecord(actorType string, record *core.Record) orders.Actor {
+	name := strings.TrimSpace(record.GetString("name"))
+	if name == "" {
+		name = record.Email()
+	}
+	return orders.Actor{Type: actorType, ID: record.Id, Name: name}
+}
+
 func addSubmittedBy(app core.App, record *core.Record) {
-	customer, err := app.FindRecordById("customers", record.GetString("customer"))
-	if err != nil {
-		return
+	var actor orders.Actor
+	if err := record.UnmarshalJSONField("placedBy", &actor); err != nil || actor.ID == "" {
+		customer, err := app.FindRecordById("customers", record.GetString("customer"))
+		if err != nil {
+			return
+		}
+		actor = actorForRecord(orders.ActorCustomer, customer)
 	}
 	record.Set("submittedBy", map[string]string{
-		"id":   customer.Id,
-		"name": customer.GetString("name"),
+		"type": actor.Type,
+		"id":   actor.ID,
+		"name": actor.Name,
 	})
 	record.WithCustomData(true)
 }
@@ -241,9 +260,10 @@ func handleCreateOrder(sq *square.Client, locationID string, deliveryQuoter deli
 		if err != nil {
 			return handleFulfillmentQuoteError(e, err)
 		}
-		pbOrder, err := orders.Create(
+		pbOrder, err := orders.CreateWithPlacement(
 			e.App, e.Auth.Id, e.Auth.GetString("company"),
 			lineItems, fulfillment, body.Notes,
+			orders.Placement{Actor: actorForRecord(orders.ActorCustomer, e.Auth)},
 		)
 		if err != nil {
 			return e.InternalServerError("Could not create order", err)
@@ -253,8 +273,205 @@ func handleCreateOrder(sq *square.Client, locationID string, deliveryQuoter deli
 	}
 }
 
-func customerCanEditOrder(customerID, ownerID, status string) bool {
-	return customerID == ownerID && status == string(fsm.StatusPending)
+func normalizePlacementNote(note string) (string, error) {
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return "", fmt.Errorf("placementNote is required")
+	}
+	if utf8.RuneCountInString(note) > 500 {
+		return "", fmt.Errorf("placementNote must be 500 characters or fewer")
+	}
+	return note, nil
+}
+
+func handleCreateStaffOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "users" {
+			return e.ForbiddenError("Only staff can place orders for customers", nil)
+		}
+
+		var body createOrderBody
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Invalid request body", err)
+		}
+		placementNote, err := normalizePlacementNote(body.PlacementNote)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		body.PlacementNote = placementNote
+		if err := validateLineItems(body.LineItems); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		fulfillment, err := orders.NormalizeFulfillment(body.Fulfillment)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		customer, err := e.App.FindRecordById("customers", e.Request.PathValue("id"))
+		if err != nil {
+			return e.NotFoundError("Customer not found", err)
+		}
+		if customer.GetString("squareCustomerId") == "" {
+			return e.BadRequestError("Customer is not linked to Square", nil)
+		}
+
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		if err != nil {
+			return e.BadRequestError("Could not lock order pricing", err)
+		}
+		fulfillment, _, err = orders.QuoteFulfillment(e.Request.Context(), deliveryQuoter, fulfillment, lineItems)
+		if err != nil {
+			return handleFulfillmentQuoteError(e, err)
+		}
+
+		staffActor := actorForRecord(orders.ActorStaff, e.Auth)
+		order, err := orders.CreateWithPlacement(
+			e.App, customer.Id, customer.GetString("company"), lineItems, fulfillment, body.Notes,
+			orders.Placement{Actor: staffActor, Note: body.PlacementNote},
+		)
+		if err != nil {
+			return e.InternalServerError("Could not create customer order", err)
+		}
+		_ = e.App.ExpandRecord(order, []string{"customer"}, nil)
+		order.Set("placementReason", body.PlacementNote)
+		order.WithCustomData(true)
+
+		notificationSent := true
+		if err := sendStaffOrderConfirmation(e.App, customer, order, staffActor); err != nil {
+			notificationSent = false
+			log.Printf("staff order %s: confirmation email failed: %v", order.Id, err)
+		}
+
+		return e.JSON(http.StatusOK, map[string]any{
+			"order":             order,
+			"notification_sent": notificationSent,
+		})
+	}
+}
+
+func sendStaffOrderConfirmation(app core.App, customer, order *core.Record, staff orders.Actor) error {
+	settings := app.Settings()
+	method := "pickup"
+	var fulfillment orders.Fulfillment
+	if err := order.UnmarshalJSONField("fulfillment", &fulfillment); err == nil && fulfillment.Method == orders.FulfillmentDelivery {
+		method = "delivery"
+	}
+	message := &mailer.Message{
+		From:    mail.Address{Name: settings.Meta.SenderName, Address: settings.Meta.SenderAddress},
+		To:      []mail.Address{{Address: customer.Email()}},
+		Subject: "GCCR Wholesale order placed on your behalf",
+		HTML: fmt.Sprintf(
+			`<p>Hi %s,</p>
+<p>%s placed a %s order on your behalf.</p>
+<p>Order reference: <strong>%s</strong></p>
+<p>You can review it immediately in <a href="%s">GCCR Wholesale</a>. Contact GCCR if anything needs correction.</p>`,
+			html.EscapeString(customer.GetString("name")),
+			html.EscapeString(staff.Name),
+			html.EscapeString(method),
+			html.EscapeString(order.Id),
+			html.EscapeString(strings.TrimRight(settings.Meta.AppURL, "/")),
+		),
+	}
+	return app.NewMailClient().Send(message)
+}
+
+func handleStaffUpdateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "users" {
+			return e.ForbiddenError("Only staff can edit customer orders", nil)
+		}
+		var body createOrderBody
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Invalid request body", err)
+		}
+		body.EditReason = strings.TrimSpace(body.EditReason)
+		if body.EditReason == "" {
+			return e.BadRequestError("editReason is required", nil)
+		}
+		if utf8.RuneCountInString(body.EditReason) > 500 {
+			return e.BadRequestError("editReason must be 500 characters or fewer", nil)
+		}
+		if err := validateLineItems(body.LineItems); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		fulfillment, err := orders.NormalizeFulfillment(body.Fulfillment)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		order, err := e.App.FindRecordById("orders", e.Request.PathValue("id"))
+		if err != nil {
+			return e.NotFoundError("Order not found", err)
+		}
+		if (order.GetString("status") != string(fsm.StatusPending) && order.GetString("status") != string(fsm.StatusConfirmed)) ||
+			order.GetString("squareOrderId") != "" || order.GetString("squareInvoiceId") != "" {
+			return e.BadRequestError("Only pending or confirmed orders can be edited before Square submission", nil)
+		}
+
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		if err != nil {
+			return e.BadRequestError("Could not update order pricing", err)
+		}
+		fulfillment, _, err = orders.QuoteFulfillment(e.Request.Context(), deliveryQuoter, fulfillment, lineItems)
+		if err != nil {
+			return handleFulfillmentQuoteError(e, err)
+		}
+		staffActor := actorForRecord(orders.ActorStaff, e.Auth)
+		order, err = orders.UpdateByStaff(e.App, order, lineItems, fulfillment, body.Notes, orders.EditAudit{
+			Actor: staffActor, Reason: body.EditReason, EditedAt: time.Now().UTC().Format(time.RFC3339),
+		})
+		if err != nil {
+			return e.BadRequestError(err.Error(), err)
+		}
+
+		customer, err := e.App.FindRecordById("customers", order.GetString("customer"))
+		if err != nil {
+			return e.InternalServerError("Could not find order customer", err)
+		}
+		_ = e.App.ExpandRecord(order, []string{"customer"}, nil)
+		addStaffEditHistory(order)
+
+		notificationSent := true
+		if err := sendStaffOrderUpdatedConfirmation(e.App, customer, order, staffActor); err != nil {
+			notificationSent = false
+			log.Printf("staff order %s: update confirmation email failed: %v", order.Id, err)
+		}
+		return e.JSON(http.StatusOK, map[string]any{
+			"order": order, "notification_sent": notificationSent,
+		})
+	}
+}
+
+func sendStaffOrderUpdatedConfirmation(app core.App, customer, order *core.Record, staff orders.Actor) error {
+	settings := app.Settings()
+	message := &mailer.Message{
+		From:    mail.Address{Name: settings.Meta.SenderName, Address: settings.Meta.SenderAddress},
+		To:      []mail.Address{{Address: customer.Email()}},
+		Subject: "Your GCCR Wholesale order was updated",
+		HTML: fmt.Sprintf(
+			`<p>Hi %s,</p>
+<p>%s updated your GCCR Wholesale order <strong>%s</strong>.</p>
+<p><a href="%s">Review your order</a> and contact GCCR if anything needs correction.</p>`,
+			html.EscapeString(customer.GetString("name")), html.EscapeString(staff.Name),
+			html.EscapeString(order.Id), html.EscapeString(strings.TrimRight(settings.Meta.AppURL, "/")),
+		),
+	}
+	return app.NewMailClient().Send(message)
+}
+
+func addStaffEditHistory(record *core.Record) {
+	var history []orders.EditAudit
+	if record.GetString("editHistory") != "" {
+		_ = record.UnmarshalJSONField("editHistory", &history)
+	}
+	record.Set("staffEditHistory", history)
+	record.WithCustomData(true)
+}
+
+func customerCanEditOrder(customerID, ownerID, status, actorType string) bool {
+	return customerID == ownerID &&
+		status == string(fsm.StatusPending) &&
+		actorType != orders.ActorStaff
 }
 
 func handleUpdateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
@@ -279,8 +496,10 @@ func handleUpdateOrder(sq *square.Client, locationID string, deliveryQuoter deli
 		if err != nil {
 			return e.NotFoundError("Order not found", err)
 		}
-		if !customerCanEditOrder(e.Auth.Id, order.GetString("customer"), order.GetString("status")) {
-			return e.ForbiddenError("Only your own pending orders can be edited", nil)
+		var placementActor orders.Actor
+		_ = order.UnmarshalJSONField("placedBy", &placementActor)
+		if !customerCanEditOrder(e.Auth.Id, order.GetString("customer"), order.GetString("status"), placementActor.Type) {
+			return e.ForbiddenError("Only customer-created pending orders can be edited", nil)
 		}
 
 		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
@@ -332,6 +551,8 @@ func handleListOrders() func(*core.RequestEvent) error {
 		for _, rec := range records {
 			if e.Auth.Collection().Name == "users" {
 				_ = e.App.ExpandRecord(rec, []string{"customer"}, nil)
+				rec.Set("placementReason", rec.GetString("placementNote"))
+				addStaffEditHistory(rec)
 			} else {
 				// Customer responses expose submitter name only, never peer contact data.
 				addSubmittedBy(e.App, rec)
@@ -449,9 +670,10 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string, deliveryQu
 		}
 
 		// Place the first local order immediately so the customer sees confirmation.
-		firstOrder, err := orders.Create(
+		firstOrder, err := orders.CreateWithPlacement(
 			e.App, e.Auth.Id, e.Auth.GetString("company"),
 			lineItems, fulfillment, body.Notes,
+			orders.Placement{Actor: actorForRecord(orders.ActorCustomer, e.Auth)},
 		)
 		if err != nil {
 			return e.InternalServerError("Could not create initial order", err)

@@ -95,9 +95,20 @@ func processOne(app core.App, sq *square.Client, locationID string, deliveryQuot
 		return fmt.Errorf("quote fulfillment: %w", err)
 	}
 
-	pbOrder, err := orders.Create(
-		app, sr.GetString("customer"), sr.GetString("company"),
+	customer, err := app.FindRecordById("customers", sr.GetString("customer"))
+	if err != nil {
+		return fmt.Errorf("find schedule customer: %w", err)
+	}
+	actorName := customer.GetString("name")
+	if actorName == "" {
+		actorName = customer.Email()
+	}
+	pbOrder, err := orders.CreateWithPlacement(
+		app, customer.Id, sr.GetString("company"),
 		items, fulfillment, sr.GetString("notes"),
+		orders.Placement{Actor: orders.Actor{
+			Type: orders.ActorCustomer, ID: customer.Id, Name: actorName,
+		}},
 	)
 	if err != nil {
 		return fmt.Errorf("create order: %w", err)
