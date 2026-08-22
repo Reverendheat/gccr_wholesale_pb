@@ -12,6 +12,7 @@
     "test:customer-lookup": "node --test scripts/customer-lookup.test.mjs",
     "test:customer-cart": "node --test scripts/customer-cart.test.mjs",
     "test:delivery-quote": "node --test scripts/delivery-quote.test.mjs",
+    "test:delivery-date": "node --test scripts/delivery-date.test.mjs",
     "test:staff-order": "node --test scripts/staff-order.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"

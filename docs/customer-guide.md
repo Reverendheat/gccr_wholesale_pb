@@ -59,11 +59,12 @@ Catalog is shared among customers; it is not customized by company account. Cont
 2. Adjust quantities.
 3. Choose **Pickup** or **Delivery**. Pickup is selected by default.
 4. For delivery, enter recipient, US delivery address, and optional delivery instructions.
-5. Wait for driving-distance quote. Checkout displays current delivery radius configured by GCCR (30 driving miles by default).
-6. Review delivery fee and estimated total. Merchandise orders of $100 or more receive free delivery; smaller orders pay $0.50 per started driving mile.
-7. Add order notes or special requests if needed.
-8. Select **Place Order**.
-9. Wait for success confirmation.
+5. Review the promised Thursday delivery date. Orders placed by Monday night target that week's Thursday; later orders target the following Thursday.
+6. Wait for the driving-distance quote. Checkout displays current delivery radius configured by GCCR (30 driving miles by default).
+7. Review delivery fee and estimated total. Merchandise orders of $100 or more receive free delivery; smaller orders pay $0.50 per started driving mile.
+8. Add order notes or special requests if needed.
+9. Select **Place Order**.
+10. Wait for success confirmation.
 
 Order is created in GCCR Wholesale with catalog pricing and delivery quote locked at submission. New order starts as `pending`. Square order and invoice are created later when staff sends invoice; any delivery fee appears as separate invoice line. Delivery address, driving distance, and fee remain snapshotted for fulfillment.
 
@@ -78,7 +79,7 @@ Open **Account Orders** to view orders submitted by you and other members of you
 - Current status
 - Square invoice link when available
 
-Select order row to expand item details. Order creator can select **Edit order** while status is `pending`. Editing replaces items, quantities, fulfillment, and notes, then locks current catalog prices. Other account members have read-only access. After staff confirms or invoices order, contact GCCR staff for corrections.
+Select order row to expand item details. Order creator can select **Edit order** while status is `pending`. Editing replaces items, quantities, fulfillment, and notes, then locks current catalog prices. Customer named on order can select **Cancel order** while status is `pending` and before Square submission, including orders entered for them by staff. Other account members have read-only access. Cancellation cannot be undone. After staff confirms or invoices order, contact GCCR staff for corrections or cancellation.
 
 ## Create recurring order
 

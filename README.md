@@ -32,33 +32,45 @@ gccr_wholesale/
 
 ## Getting Started
 
-### Backend
+1. Copy and fill in the backend and frontend environment files:
 
-1. Copy and fill in environment variables:
    ```sh
    cp .env.example .env
-   ```
-
-2. Run the server:
-   ```sh
-   go run ./cmd/server serve
-   ```
-   PocketBase Admin UI is available at `http://127.0.0.1:8090/_/`.
-
-### Frontend
-
-1. Copy and fill in frontend environment variables:
-   ```sh
    cp frontend/.env.example frontend/.env
    ```
 
-2. Install dependencies and start dev server:
+2. Install frontend dependencies:
+
    ```sh
-   cd frontend
-   npm install
-   npm run dev
+   npm --prefix frontend install
    ```
-   App runs at `http://localhost:5173`.
+
+3. Start the complete development stack:
+
+   ```sh
+   just dev
+   ```
+
+   This starts PocketBase, Vite, and the local Mailpit OTP catcher:
+
+   - Application: `http://localhost:5173`
+   - PocketBase Admin: `http://127.0.0.1:8090/_/`
+   - OTP inbox: `http://localhost:8025`
+
+Request an OTP for an existing local staff or customer email and read it in the
+Mailpit inbox. Stopping `just dev` also stops Mailpit. Mailpit exists only in
+`docker-compose.dev.yml`; the production image and Compose stack do not include
+it.
+
+To preview the customer delivery promise against a fixed date, sign in locally
+as a customer and open `/portal?deliveryNow=<ISO-8601 timestamp>`. This override
+is available only in the Vite development build. For example, compare Monday
+and Tuesday around the weekly cutoff:
+
+```text
+http://localhost:5173/portal?deliveryNow=2026-08-24T20:00:00-04:00
+http://localhost:5173/portal?deliveryNow=2026-08-25T12:00:00-04:00
+```
 
 ## Database Migrations
 

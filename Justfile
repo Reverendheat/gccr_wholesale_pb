@@ -2,13 +2,27 @@ set dotenv-load
 
 default: dev
 
-# Start both the PocketBase backend and the React dev server
+# Start PocketBase, the React dev server, and the local OTP inbox
 dev:
     #!/usr/bin/env bash
     set -e
-    go run ./cmd/server serve &
+    BACKEND_PID=""
+    cleanup() {
+        if [ -n "$BACKEND_PID" ]; then
+            kill "$BACKEND_PID" 2>/dev/null || true
+        fi
+        docker compose -f docker-compose.dev.yml down >/dev/null 2>&1 || true
+    }
+    trap cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    docker compose -f docker-compose.dev.yml up -d --wait mailpit
+    echo "Mailpit inbox: http://localhost:8025"
+
+    PB_SMTP_ENABLED=true PB_SMTP_HOST=127.0.0.1 PB_SMTP_PORT=1025 PB_SMTP_TLS=false \
+        go run ./cmd/server serve &
     BACKEND_PID=$!
-    trap "kill $BACKEND_PID 2>/dev/null" EXIT
     cd frontend && npm run dev
 
 # PocketBase only

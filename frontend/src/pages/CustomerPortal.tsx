@@ -4,6 +4,7 @@ import {
   fetchWholesaleCatalog,
   submitOrder,
   updateOrder,
+  cancelOrder,
   submitScheduledOrder,
   fetchOrders,
   fetchScheduledOrders,
@@ -19,6 +20,11 @@ import {
   type FulfillmentOptions,
   type FulfillmentQuoteResult,
 } from "../lib/api";
+import {
+  deliveryPreviewNow,
+  estimatedDeliveryDate,
+  formatDeliveryDate,
+} from "../lib/deliveryDate";
 import "./CustomerPortal.css";
 
 type CartItem = {
@@ -111,6 +117,7 @@ export default function CustomerPortal() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -122,6 +129,13 @@ export default function CustomerPortal() {
   // Schedule mode state
   const [scheduleMode, setScheduleMode] = useState(false);
   const [frequency, setFrequency] = useState<ScheduleFrequency>("weekly");
+  const [deliveryTiming] = useState(() => {
+    const preview = deliveryPreviewNow(window.location.search, import.meta.env.DEV);
+    return {
+      date: formatDeliveryDate(estimatedDeliveryDate(preview.now)),
+      isPreview: preview.overridden,
+    };
+  });
 
   useEffect(() => {
     async function load() {
@@ -304,6 +318,24 @@ export default function CustomerPortal() {
       setError(e instanceof Error ? e.message : "Scheduled order failed");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleCancelOrder(order: Order) {
+    if (!window.confirm(`Cancel order ${order.id.slice(0, 8)}? This cannot be undone.`)) return;
+    setCancellingOrderId(order.id);
+    setError(null);
+    try {
+      await cancelOrder(order.id);
+      setOrders((prev) => prev.map((existing) =>
+        existing.id === order.id ? { ...existing, status: "cancelled" } : existing
+      ));
+      setSuccess("Order cancelled.");
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not cancel order");
+    } finally {
+      setCancellingOrderId(null);
     }
   }
 
@@ -529,6 +561,11 @@ export default function CustomerPortal() {
 
                     {fulfillment.method === "delivery" && (
                       <div className="delivery-fields">
+                        <div className="delivery-timing" role="status">
+                          <strong>Orders placed now will be delivered {deliveryTiming.date}.</strong>
+                          <span>Order by Monday night for Thursday delivery.</span>
+                          {deliveryTiming.isPreview && <small>Local delivery-date preview</small>}
+                        </div>
                         <label>
                           Recipient name *
                           <input
@@ -798,13 +835,25 @@ export default function CustomerPortal() {
                                   <strong>Notes:</strong> {o.notes}
                                 </p>
                               )}
-                              {o.customer === user?.id && o.status === "pending" && (o.placedBy?.type ?? "customer") === "customer" && (
-                                <button
-                                  className="btn-edit-order"
-                                  onClick={() => startEditingOrder(o)}
-                                >
-                                  Edit order
-                                </button>
+                              {o.customer === user?.id && o.status === "pending" && (
+                                <div className="order-detail-actions">
+                                  {(o.placedBy?.type ?? "customer") === "customer" && (
+                                    <button
+                                      className="btn-edit-order"
+                                      onClick={() => startEditingOrder(o)}
+                                      disabled={cancellingOrderId === o.id}
+                                    >
+                                      Edit order
+                                    </button>
+                                  )}
+                                  <button
+                                    className="btn-cancel"
+                                    onClick={() => handleCancelOrder(o)}
+                                    disabled={cancellingOrderId === o.id}
+                                  >
+                                    {cancellingOrderId === o.id ? "Cancelling…" : "Cancel order"}
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </td>

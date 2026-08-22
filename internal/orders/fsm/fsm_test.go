@@ -14,6 +14,7 @@ func TestApplyAllowedTransitions(t *testing.T) {
 		{"staff invoices pending", StatusPending, EventStaffSendInvoice, StatusInvoiced},
 		{"staff invoices confirmed", StatusConfirmed, EventStaffSendInvoice, StatusInvoiced},
 		{"staff invoices delivered", StatusDelivered, EventStaffSendInvoice, StatusInvoiced},
+		{"customer cancels pending", StatusPending, EventCustomerCancel, StatusCancelled},
 		{"customer change request keeps pending", StatusPending, EventCustomerChangeReq, StatusPending},
 		{"square payment moves invoiced to paid", StatusInvoiced, EventSquareInvoicePaid, StatusPaid},
 		{"square payment can pull pending to paid", StatusPending, EventSquareInvoicePaid, StatusPaid},

@@ -324,6 +324,18 @@ export async function updateOrder(
   return res.json();
 }
 
+export async function cancelOrder(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/orders/${id}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ event: "customer_cancel" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Order cancellation failed: ${res.status}`);
+  }
+}
+
 export async function fetchOrders(): Promise<Order[]> {
   const res = await fetch(`${BASE}/orders`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Orders fetch failed: ${res.status}`);

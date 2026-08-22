@@ -58,6 +58,33 @@ func TestCustomerCanEditOnlyOwnPendingOrder(t *testing.T) {
 	}
 }
 
+func TestCustomerCanCancelOnlyOwnPendingPreSquareOrder(t *testing.T) {
+	tests := []struct {
+		name            string
+		customerID      string
+		ownerID         string
+		status          string
+		squareOrderID   string
+		squareInvoiceID string
+		want            bool
+	}{
+		{name: "own pending order", customerID: "customer1", ownerID: "customer1", status: "pending", want: true},
+		{name: "account peer order", customerID: "customer1", ownerID: "customer2", status: "pending", want: false},
+		{name: "own confirmed order", customerID: "customer1", ownerID: "customer1", status: "confirmed", want: false},
+		{name: "Square order exists", customerID: "customer1", ownerID: "customer1", status: "pending", squareOrderID: "SQ1", want: false},
+		{name: "Square invoice exists", customerID: "customer1", ownerID: "customer1", status: "pending", squareInvoiceID: "INV1", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := customerCanCancelOrder(tt.customerID, tt.ownerID, tt.status, tt.squareOrderID, tt.squareInvoiceID)
+			if got != tt.want {
+				t.Fatalf("customerCanCancelOrder() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateAccountSelection(t *testing.T) {
 	tests := []struct {
 		name           string

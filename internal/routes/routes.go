@@ -45,7 +45,7 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID, deliveryCalculator))
 	g.PATCH("/orders/{id}/staff", handleStaffUpdateOrder(sq, locationID, deliveryCalculator))
 
-	// POST /api/wholesale/orders/{id}/events — staff applies a workflow event
+	// POST /api/wholesale/orders/{id}/events — authorized customer/staff workflow event
 	g.POST("/orders/{id}/events", handleOrderEvent())
 
 	// POST /api/wholesale/scheduled-orders — customer creates a recurring order
@@ -474,6 +474,14 @@ func customerCanEditOrder(customerID, ownerID, status, actorType string) bool {
 		actorType != orders.ActorStaff
 }
 
+func customerCanCancelOrder(customerID, ownerID, status, squareOrderID, squareInvoiceID string) bool {
+	return customerID != "" &&
+		customerID == ownerID &&
+		status == string(fsm.StatusPending) &&
+		squareOrderID == "" &&
+		squareInvoiceID == ""
+}
+
 func handleUpdateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
@@ -577,8 +585,12 @@ var staffOrderEvents = map[fsm.Event]bool{
 
 func handleOrderEvent() func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		if e.Auth == nil || e.Auth.Collection().Name != "users" {
-			return e.ForbiddenError("Only staff can update order workflow", nil)
+		if e.Auth == nil {
+			return e.ForbiddenError("Authentication required", nil)
+		}
+		authCollection := e.Auth.Collection().Name
+		if authCollection != "users" && authCollection != "customers" {
+			return e.ForbiddenError("Account cannot update order workflow", nil)
 		}
 
 		var body orderEventBody
@@ -589,13 +601,25 @@ func handleOrderEvent() func(*core.RequestEvent) error {
 			return e.BadRequestError("event is required", nil)
 		}
 		event := fsm.Event(body.Event)
-		if !staffOrderEvents[event] {
+		if authCollection == "users" && !staffOrderEvents[event] {
 			return e.BadRequestError("event is not allowed for staff workflow updates", nil)
+		}
+		if authCollection == "customers" && event != fsm.EventCustomerCancel {
+			return e.BadRequestError("event is not allowed for customer workflow updates", nil)
 		}
 
 		order, err := e.App.FindRecordById("orders", e.Request.PathValue("id"))
 		if err != nil {
 			return e.NotFoundError("Order not found", err)
+		}
+		if authCollection == "customers" && !customerCanCancelOrder(
+			e.Auth.Id,
+			order.GetString("customer"),
+			order.GetString("status"),
+			order.GetString("squareOrderId"),
+			order.GetString("squareInvoiceId"),
+		) {
+			return e.BadRequestError("Only your own pending pre-Square orders can be cancelled", nil)
 		}
 
 		next, err := fsm.Apply(fsm.Status(order.GetString("status")), event)
