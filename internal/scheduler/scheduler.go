@@ -16,9 +16,9 @@ import (
 
 // Register wires a cron job that fires every 30 minutes and creates any
 // scheduled orders that are due.
-func Register(app core.App, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) {
+func Register(app core.App, sq *square.Client, deliveryQuoter delivery.Quoter) {
 	app.Cron().MustAdd("scheduledOrders", "*/30 * * * *", func() {
-		if err := process(app, sq, locationID, deliveryQuoter); err != nil {
+		if err := process(app, sq, deliveryQuoter); err != nil {
 			log.Printf("scheduled orders cron: %v", err)
 		}
 	})
@@ -32,7 +32,7 @@ func Register(app core.App, sq *square.Client, locationID string, deliveryQuoter
 
 // process finds all active scheduled orders whose next_run_at is in the past
 // (or now), creates an order for each, and advances next_run_at.
-func process(app core.App, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) error {
+func process(app core.App, sq *square.Client, deliveryQuoter delivery.Quoter) error {
 	due, err := app.FindRecordsByFilter(
 		"scheduledOrders",
 		"active = true && next_run_at <= @now",
@@ -43,7 +43,7 @@ func process(app core.App, sq *square.Client, locationID string, deliveryQuoter 
 	}
 
 	for _, sr := range due {
-		if err := processOne(app, sq, locationID, deliveryQuoter, sr); err != nil {
+		if err := processOne(app, sq, deliveryQuoter, sr); err != nil {
 			log.Printf("scheduled order %s: %v", sr.Id, err)
 		}
 	}
@@ -52,7 +52,7 @@ func process(app core.App, sq *square.Client, locationID string, deliveryQuoter 
 
 // processOne creates a single order for one scheduledOrders record and
 // advances its next_run_at timestamp.
-func processOne(app core.App, sq *square.Client, locationID string, deliveryQuoter delivery.Quoter, sr *core.Record) error {
+func processOne(app core.App, sq *square.Client, deliveryQuoter delivery.Quoter, sr *core.Record) error {
 	ctx := context.Background()
 	var err error
 
@@ -86,7 +86,16 @@ func processOne(app core.App, sq *square.Client, locationID string, deliveryQuot
 		return fmt.Errorf("validate fulfillment: %w", err)
 	}
 
-	items, err = orders.LockPrices(ctx, sq, locationID, items)
+	customer, err := app.FindRecordById("customers", sr.GetString("customer"))
+	if err != nil {
+		return fmt.Errorf("find schedule customer: %w", err)
+	}
+	squareCustomerID := customer.GetString("squareCustomerId")
+	if squareCustomerID == "" {
+		return fmt.Errorf("schedule customer is not linked to Square")
+	}
+
+	items, err = orders.LockPrices(ctx, sq, squareCustomerID, items)
 	if err != nil {
 		return fmt.Errorf("lock order pricing: %w", err)
 	}
@@ -95,10 +104,6 @@ func processOne(app core.App, sq *square.Client, locationID string, deliveryQuot
 		return fmt.Errorf("quote fulfillment: %w", err)
 	}
 
-	customer, err := app.FindRecordById("customers", sr.GetString("customer"))
-	if err != nil {
-		return fmt.Errorf("find schedule customer: %w", err)
-	}
 	actorName := customer.GetString("name")
 	if actorName == "" {
 		actorName = customer.Email()

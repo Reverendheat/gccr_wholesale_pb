@@ -33,23 +33,23 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 
 	// Fulfillment options expose public policy; quotes remain server-authoritative.
 	g.GET("/fulfillment/options", handleFulfillmentOptions(deliveryCalculator))
-	g.POST("/fulfillment/quote", handleFulfillmentQuote(sq, locationID, deliveryCalculator))
+	g.POST("/fulfillment/quote", handleFulfillmentQuote(sq, deliveryCalculator))
 
 	// POST /api/wholesale/orders — customer submits a one-time order
-	g.POST("/orders", handleCreateOrder(sq, locationID, deliveryCalculator))
+	g.POST("/orders", handleCreateOrder(sq, deliveryCalculator))
 
 	// GET /api/wholesale/orders — customers see own/account records; staff see all
 	g.GET("/orders", handleListOrders())
 
 	// Validated customer and staff order edits.
-	g.PATCH("/orders/{id}", handleUpdateOrder(sq, locationID, deliveryCalculator))
-	g.PATCH("/orders/{id}/staff", handleStaffUpdateOrder(sq, locationID, deliveryCalculator))
+	g.PATCH("/orders/{id}", handleUpdateOrder(sq, deliveryCalculator))
+	g.PATCH("/orders/{id}/staff", handleStaffUpdateOrder(sq, deliveryCalculator))
 
 	// POST /api/wholesale/orders/{id}/events — authorized customer/staff workflow event
 	g.POST("/orders/{id}/events", handleOrderEvent())
 
 	// POST /api/wholesale/scheduled-orders — customer creates a recurring order
-	g.POST("/scheduled-orders", handleCreateScheduledOrder(sq, locationID, deliveryCalculator))
+	g.POST("/scheduled-orders", handleCreateScheduledOrder(sq, deliveryCalculator))
 
 	// GET /api/wholesale/scheduled-orders — list active scheduled orders
 	g.GET("/scheduled-orders", handleListScheduledOrders())
@@ -63,7 +63,7 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 	// Staff-controlled customer operations.
 	g.POST("/customers/preview", handlePreviewCustomer(sq))
 	g.PATCH("/customers/{id}/account", handleAssignCustomerAccount())
-	g.POST("/customers/{id}/orders", handleCreateStaffOrder(sq, locationID, deliveryCalculator))
+	g.POST("/customers/{id}/orders", handleCreateStaffOrder(sq, deliveryCalculator))
 
 	// POST /api/wholesale/invite — staff confirms account membership and invites a Square customer.
 	g.POST("/invite", handleInviteCustomer(sq))
@@ -76,7 +76,19 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 
 func handleCatalog(sq *square.Client) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		items, err := sq.GetWholesaleCatalog(e.Request.Context())
+		staffCustomerID := ""
+		if e.Auth != nil && e.Auth.Collection().Name == "users" {
+			staffCustomerID = e.Request.URL.Query().Get("customer_id")
+		}
+		squareCustomerID, err := squareCustomerIDForAccess(
+			e,
+			staffCustomerID,
+			"customer_id is required for staff catalog access",
+		)
+		if err != nil {
+			return err
+		}
+		items, err := sq.GetWholesaleCatalog(e.Request.Context(), squareCustomerID)
 		if err != nil {
 			return e.InternalServerError("Could not fetch catalog", err)
 		}
@@ -97,6 +109,41 @@ type createOrderBody struct {
 	Fulfillment   orders.Fulfillment   `json:"fulfillment"`
 	PlacementNote string               `json:"placementNote"`
 	EditReason    string               `json:"editReason"`
+	CustomerID    string               `json:"customer_id"`
+}
+
+func squareCustomerIDForAccess(
+	e *core.RequestEvent,
+	staffCustomerID string,
+	staffMissingMessage string,
+) (string, error) {
+	if e.Auth == nil {
+		return "", e.ForbiddenError("Only customers or staff can access the wholesale catalog", nil)
+	}
+	switch e.Auth.Collection().Name {
+	case "customers":
+		squareCustomerID := e.Auth.GetString("squareCustomerId")
+		if squareCustomerID == "" {
+			return "", e.ForbiddenError("Account is not linked to Square", nil)
+		}
+		return squareCustomerID, nil
+	case "users":
+		staffCustomerID = strings.TrimSpace(staffCustomerID)
+		if staffCustomerID == "" {
+			return "", e.BadRequestError(staffMissingMessage, nil)
+		}
+		customer, err := e.App.FindRecordById("customers", staffCustomerID)
+		if err != nil {
+			return "", e.NotFoundError("Customer not found", err)
+		}
+		squareCustomerID := customer.GetString("squareCustomerId")
+		if squareCustomerID == "" {
+			return "", e.BadRequestError("Customer is not linked to Square", nil)
+		}
+		return squareCustomerID, nil
+	default:
+		return "", e.ForbiddenError("Only customers or staff can access the wholesale catalog", nil)
+	}
 }
 
 func validateLineItems(items []orderLineItemInput) error {
@@ -132,11 +179,8 @@ func handleFulfillmentOptions(deliveryCalculator delivery.Calculator) func(*core
 	}
 }
 
-func handleFulfillmentQuote(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+func handleFulfillmentQuote(sq *square.Client, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		if e.Auth == nil || (e.Auth.Collection().Name != "customers" && e.Auth.Collection().Name != "users") {
-			return e.ForbiddenError("Only customers or staff can request fulfillment quotes", nil)
-		}
 		var body createOrderBody
 		if err := e.BindBody(&body); err != nil {
 			return e.BadRequestError("Invalid request body", err)
@@ -144,7 +188,15 @@ func handleFulfillmentQuote(sq *square.Client, locationID string, deliveryQuoter
 		if err := validateLineItems(body.LineItems); err != nil {
 			return e.BadRequestError(err.Error(), nil)
 		}
-		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		squareCustomerID, err := squareCustomerIDForAccess(
+			e,
+			body.CustomerID,
+			"customer_id is required for staff quote access",
+		)
+		if err != nil {
+			return err
+		}
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, squareCustomerID, toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.BadRequestError("Could not price fulfillment quote", err)
 		}
@@ -230,7 +282,7 @@ func addSubmittedBy(app core.App, record *core.Record) {
 	record.WithCustomData(true)
 }
 
-func handleCreateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+func handleCreateOrder(sq *square.Client, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
 			return e.ForbiddenError("Only customers can place orders", nil)
@@ -248,11 +300,12 @@ func handleCreateOrder(sq *square.Client, locationID string, deliveryQuoter deli
 			return e.BadRequestError(err.Error(), nil)
 		}
 
-		if e.Auth.GetString("squareCustomerId") == "" {
+		squareCustomerID := e.Auth.GetString("squareCustomerId")
+		if squareCustomerID == "" {
 			return e.ForbiddenError("Account is not linked to Square", nil)
 		}
 
-		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, squareCustomerID, toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.InternalServerError("Could not lock order pricing", err)
 		}
@@ -284,7 +337,7 @@ func normalizePlacementNote(note string) (string, error) {
 	return note, nil
 }
 
-func handleCreateStaffOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+func handleCreateStaffOrder(sq *square.Client, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "users" {
 			return e.ForbiddenError("Only staff can place orders for customers", nil)
@@ -315,7 +368,7 @@ func handleCreateStaffOrder(sq *square.Client, locationID string, deliveryQuoter
 			return e.BadRequestError("Customer is not linked to Square", nil)
 		}
 
-		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, customer.GetString("squareCustomerId"), toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.BadRequestError("Could not lock order pricing", err)
 		}
@@ -375,7 +428,7 @@ func sendStaffOrderConfirmation(app core.App, customer, order *core.Record, staf
 	return app.NewMailClient().Send(message)
 }
 
-func handleStaffUpdateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+func handleStaffUpdateOrder(sq *square.Client, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "users" {
 			return e.ForbiddenError("Only staff can edit customer orders", nil)
@@ -407,8 +460,15 @@ func handleStaffUpdateOrder(sq *square.Client, locationID string, deliveryQuoter
 			order.GetString("squareOrderId") != "" || order.GetString("squareInvoiceId") != "" {
 			return e.BadRequestError("Only pending or confirmed orders can be edited before Square submission", nil)
 		}
+		customer, err := e.App.FindRecordById("customers", order.GetString("customer"))
+		if err != nil {
+			return e.InternalServerError("Could not find order customer", err)
+		}
+		if customer.GetString("squareCustomerId") == "" {
+			return e.BadRequestError("Customer is not linked to Square", nil)
+		}
 
-		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, customer.GetString("squareCustomerId"), toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.BadRequestError("Could not update order pricing", err)
 		}
@@ -424,10 +484,6 @@ func handleStaffUpdateOrder(sq *square.Client, locationID string, deliveryQuoter
 			return e.BadRequestError(err.Error(), err)
 		}
 
-		customer, err := e.App.FindRecordById("customers", order.GetString("customer"))
-		if err != nil {
-			return e.InternalServerError("Could not find order customer", err)
-		}
 		_ = e.App.ExpandRecord(order, []string{"customer"}, nil)
 		addStaffEditHistory(order)
 
@@ -482,7 +538,7 @@ func customerCanCancelOrder(customerID, ownerID, status, squareOrderID, squareIn
 		squareInvoiceID == ""
 }
 
-func handleUpdateOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+func handleUpdateOrder(sq *square.Client, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
 			return e.ForbiddenError("Only customers can edit orders", nil)
@@ -509,8 +565,15 @@ func handleUpdateOrder(sq *square.Client, locationID string, deliveryQuoter deli
 		if !customerCanEditOrder(e.Auth.Id, order.GetString("customer"), order.GetString("status"), placementActor.Type) {
 			return e.ForbiddenError("Only customer-created pending orders can be edited", nil)
 		}
+		customer, err := e.App.FindRecordById("customers", order.GetString("customer"))
+		if err != nil {
+			return e.InternalServerError("Could not find order customer", err)
+		}
+		if customer.GetString("squareCustomerId") == "" {
+			return e.BadRequestError("Customer is not linked to Square", nil)
+		}
 
-		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, customer.GetString("squareCustomerId"), toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.BadRequestError("Could not update order pricing", err)
 		}
@@ -658,7 +721,7 @@ type createScheduledOrderBody struct {
 	Fulfillment orders.Fulfillment   `json:"fulfillment"`
 }
 
-func handleCreateScheduledOrder(sq *square.Client, locationID string, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
+func handleCreateScheduledOrder(sq *square.Client, deliveryQuoter delivery.Quoter) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if e.Auth == nil || e.Auth.Collection().Name != "customers" {
 			return e.ForbiddenError("Only customers can create scheduled orders", nil)
@@ -679,11 +742,12 @@ func handleCreateScheduledOrder(sq *square.Client, locationID string, deliveryQu
 			return e.BadRequestError(err.Error(), nil)
 		}
 
-		if e.Auth.GetString("squareCustomerId") == "" {
+		squareCustomerID := e.Auth.GetString("squareCustomerId")
+		if squareCustomerID == "" {
 			return e.ForbiddenError("Account is not linked to Square", nil)
 		}
 
-		lineItems, err := orders.LockPrices(e.Request.Context(), sq, locationID, toOrderLineItems(body.LineItems))
+		lineItems, err := orders.LockPrices(e.Request.Context(), sq, squareCustomerID, toOrderLineItems(body.LineItems))
 		if err != nil {
 			return e.InternalServerError("Could not lock initial order pricing", err)
 		}
