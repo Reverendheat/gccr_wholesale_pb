@@ -466,28 +466,31 @@ export default function CustomerPortal() {
                 return (
                   <div key={audience} className="catalog-audience-section">
                     <h2>{label}</h2>
-                    {items.length === 0 && (
+                    {items.length === 0 ? (
                       <p className="muted">No items available.</p>
-                    )}
-                    {items.map((item) => (
-                      <div key={item.id} className="catalog-card">
-                        <div className="catalog-card-name">{item.item_data.name}</div>
-                        {item.item_data.description && (
-                          <p className="catalog-card-desc">
-                            {item.item_data.description}
-                          </p>
-                        )}
-                        <div className="catalog-card-variations">
-                          {item.item_data.variations.map((v) => (
-                            <VariationTag
-                              key={v.id}
-                              variation={v}
-                              onAdd={() => addToCart(item, v)}
-                            />
-                          ))}
-                        </div>
+                    ) : (
+                      <div className="catalog-audience-items">
+                        {items.map((item) => (
+                          <div key={item.id} className="catalog-card">
+                            <div className="catalog-card-name">{item.item_data.name}</div>
+                            {item.item_data.description && (
+                              <p className="catalog-card-desc">
+                                {item.item_data.description}
+                              </p>
+                            )}
+                            <div className="catalog-card-variations">
+                              {item.item_data.variations.map((v) => (
+                                <VariationTag
+                                  key={v.id}
+                                  variation={v}
+                                  onAdd={() => addToCart(item, v)}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 );
               })}
