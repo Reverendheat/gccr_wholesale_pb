@@ -66,41 +66,30 @@ func MerchandiseSubtotal(items []LineItem) (int64, string, error) {
 	return subtotal, currency, nil
 }
 
-// LockPrices resolves requested variations against the current wholesale
-// catalog and returns submission-time price snapshots.
-func LockPrices(ctx context.Context, sq *square.Client, locationID string, requested []LineItem) ([]LineItem, error) {
-	catalog, err := sq.GetWholesaleCatalog(ctx)
+// LockPrices resolves requested variations against the target customer's current
+// wholesale catalog and returns submission-time price snapshots.
+func LockPrices(ctx context.Context, sq *square.Client, squareCustomerID string, requested []LineItem) ([]LineItem, error) {
+	catalog, err := sq.GetWholesaleCatalog(ctx, squareCustomerID)
 	if err != nil {
 		return nil, err
 	}
 
 	available := make(map[string]LineItem)
 	for _, item := range catalog {
-		if item == nil || item.Item == nil || item.Item.ItemData == nil {
+		if item.ItemData == nil {
 			continue
 		}
 		itemName := ""
-		if item.Item.ItemData.Name != nil {
-			itemName = *item.Item.ItemData.Name
+		if item.ItemData.Name != nil {
+			itemName = *item.ItemData.Name
 		}
-		for _, variation := range item.Item.ItemData.Variations {
+		for _, variation := range item.ItemData.Variations {
 			if variation == nil || variation.ItemVariation == nil || variation.ItemVariation.ID == "" || variation.ItemVariation.ItemVariationData == nil {
 				continue
 			}
 			data := variation.ItemVariation.ItemVariationData
 			price := data.PriceMoney
 			pricingType := data.PricingType
-			for _, override := range data.LocationOverrides {
-				if override == nil || override.LocationID == nil || *override.LocationID != locationID {
-					continue
-				}
-				if override.PricingType != nil {
-					pricingType = override.PricingType
-				}
-				if override.PriceMoney != nil {
-					price = override.PriceMoney
-				}
-			}
 			if pricingType != nil && *pricingType == squaresdk.CatalogPricingTypeVariablePricing {
 				continue
 			}

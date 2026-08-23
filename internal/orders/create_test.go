@@ -18,39 +18,85 @@ import (
 func TestLockPricesSnapshotsSubmissionPrice(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{{
-			"id": "ITEM1", "type": "ITEM",
-			"item_data": map[string]any{
-				"name": "Wholesale Coffee",
-				"variations": []map[string]any{{
-					"id": "VAR1", "type": "ITEM_VARIATION",
-					"item_variation_data": map[string]any{
-						"name": "5 lb", "pricing_type": "FIXED_PRICING",
-						"price_money": map[string]any{"amount": 1000, "currency": "USD"},
-						"location_overrides": []map[string]any{{
-							"location_id": "HILLTOP",
-							"price_money": map[string]any{"amount": 1250, "currency": "USD"},
+		switch r.URL.Path {
+		case "/v2/customers/SQUARE_CUSTOMER":
+			_ = json.NewEncoder(w).Encode(map[string]any{"customer": map[string]any{
+				"id": "SQUARE_CUSTOMER", "group_ids": []string{"GROCERY_GROUP"},
+			}})
+		case "/v2/catalog/search-catalog-items":
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{
+				{
+					"id": "ITEM1", "type": "ITEM",
+					"custom_attribute_values": map[string]any{
+						"prefixed:grocery": map[string]any{
+							"custom_attribute_definition_id": "GROCERY_ATTRIBUTE",
+							"type":                           "BOOLEAN", "boolean_value": true,
+						},
+						"prefixed:cafe": map[string]any{
+							"custom_attribute_definition_id": "CAFE_ATTRIBUTE",
+							"type":                           "BOOLEAN", "boolean_value": false,
+						},
+					},
+					"item_data": map[string]any{
+						"name": "Wholesale Coffee",
+						"variations": []map[string]any{{
+							"id": "VAR1", "type": "ITEM_VARIATION",
+							"item_variation_data": map[string]any{
+								"name": "5 lb", "pricing_type": "FIXED_PRICING",
+								"price_money": map[string]any{"amount": 1000, "currency": "USD"},
+							},
 						}},
 					},
-				}},
-			},
-		}}})
+				},
+				{
+					"id": "HIDDEN_ITEM", "type": "ITEM",
+					"custom_attribute_values": map[string]any{
+						"prefixed:grocery": map[string]any{
+							"custom_attribute_definition_id": "GROCERY_ATTRIBUTE",
+							"type":                           "BOOLEAN", "boolean_value": false,
+						},
+						"prefixed:cafe": map[string]any{
+							"custom_attribute_definition_id": "CAFE_ATTRIBUTE",
+							"type":                           "BOOLEAN", "boolean_value": true,
+						},
+					},
+					"item_data": map[string]any{
+						"name": "Hidden Coffee",
+						"variations": []map[string]any{{
+							"id": "HIDDEN_VAR", "type": "ITEM_VARIATION",
+							"item_variation_data": map[string]any{
+								"name": "5 lb", "pricing_type": "FIXED_PRICING",
+								"price_money": map[string]any{"amount": 900, "currency": "USD"},
+							},
+						}},
+					},
+				},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
 	sq := &square.Client{
-		SDK:                 squareclient.NewClient(option.WithToken("tok"), option.WithBaseURL(srv.URL)),
-		WholesaleCategoryID: "WHOLESALE",
+		SDK:                                   squareclient.NewClient(option.WithToken("tok"), option.WithBaseURL(srv.URL)),
+		WholesaleCategoryID:                   "WHOLESALE",
+		WholesaleGroceryGroupID:               "GROCERY_GROUP",
+		WholesaleCafeRestaurantGroupID:        "CAFE_GROUP",
+		WholesaleGroceryAttributeID:           "GROCERY_ATTRIBUTE",
+		WholesaleCafeRestaurantAttributeID:    "CAFE_ATTRIBUTE",
+		WholesaleCustomerAllowlistAttributeID: "ALLOWLIST_ATTRIBUTE",
 	}
-	items, err := LockPrices(context.Background(), sq, "HILLTOP", []LineItem{{VariationID: "VAR1", Quantity: 2}})
+	items, err := LockPrices(context.Background(), sq, "SQUARE_CUSTOMER", []LineItem{{VariationID: "VAR1", Quantity: 2}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].Name != "Wholesale Coffee - 5 lb" || items[0].UnitPriceCents != 1250 || items[0].Currency != "USD" {
+	if len(items) != 1 || items[0].Name != "Wholesale Coffee - 5 lb" || items[0].UnitPriceCents != 1000 || items[0].Currency != "USD" {
 		t.Fatalf("unexpected locked item: %+v", items)
 	}
-	if _, err := LockPrices(context.Background(), sq, "HILLTOP", []LineItem{{VariationID: "NOT_WHOLESALE", Quantity: 1}}); err == nil {
-		t.Fatal("expected unavailable variation error")
+	_, err = LockPrices(context.Background(), sq, "SQUARE_CUSTOMER", []LineItem{{VariationID: "HIDDEN_VAR", Quantity: 1}})
+	if err == nil || err.Error() != `variation "HIDDEN_VAR" is unavailable in the wholesale catalog` {
+		t.Fatalf("hidden variation error = %v", err)
 	}
 }
 
