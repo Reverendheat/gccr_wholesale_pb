@@ -61,23 +61,39 @@
 
 /* Catalog grid */
 .catalog-grid h2 { margin-bottom: 1.25rem; }
+.catalog-audience-section + .catalog-audience-section { margin-top: 2.5rem; }
+.catalog-audience-items {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
 .catalog-card {
+  display: flex; flex-direction: column; min-width: 0;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem;
+  border-radius: var(--radius); padding: 1.25rem;
 }
 .catalog-card-name { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.3rem; }
-.catalog-card-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem; }
-.catalog-card-variations { display: flex; flex-direction: column; gap: 0.5rem; }
+.catalog-card-desc { flex: 1; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+.catalog-card-variations { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
+
+@media (max-width: 1100px) {
+  .catalog-audience-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 650px) {
+  .catalog-audience-items { grid-template-columns: 1fr; }
+}
 
 .variation {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.5rem 0.75rem; background: var(--bg);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 0.5rem 0.75rem;
+  padding: 0.75rem; background: var(--bg);
   border-radius: var(--radius); font-size: 0.9rem;
 }
-.variation-name { flex: 1; font-weight: 500; }
-.variation-price { color: var(--text-muted); min-width: 120px; text-align: right; }
+.variation-name { grid-column: 1 / -1; font-weight: 500; }
+.variation-price { color: var(--text-muted); min-width: 0; text-align: left; }
 .btn-add {
-  padding: 0.3rem 0.75rem; font-size: 0.85rem; font-weight: 600;
+  justify-self: end; padding: 0.3rem 0.75rem;
+  font-size: 0.85rem; font-weight: 600;
   background: var(--primary); color: #fff; border: none; border-radius: var(--radius);
   cursor: pointer; white-space: nowrap;
 }
