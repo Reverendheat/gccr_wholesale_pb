@@ -181,5 +181,6 @@ sketch
 
 .cursor/
 .playwright-mcp/
+.omp/
 pb_data/
 .dev.sh
