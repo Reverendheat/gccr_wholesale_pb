@@ -15,6 +15,7 @@
     "test:delivery-date": "node --test scripts/delivery-date.test.mjs",
     "test:staff-order": "node --test scripts/staff-order.test.mjs",
     "test:catalog-visibility": "node --test scripts/catalog-visibility.test.mjs",
+    "test:customer-audience": "node --test scripts/customer-audience.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

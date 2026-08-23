@@ -25,6 +25,11 @@ export interface CustomerRecord {
   };
 }
 
+export interface CustomerAudienceAccess {
+  grocery: boolean;
+  cafe_restaurant: boolean;
+}
+
 export async function fetchCustomers(): Promise<CustomerRecord[]> {
   return pb.collection("customers").getFullList<CustomerRecord>({
     sort: "name",
@@ -84,6 +89,35 @@ function authHeaders(): Record<string, string> {
   return pb.authStore.token
     ? { Authorization: pb.authStore.token }
     : {};
+}
+
+export async function fetchCustomerAudienceAccess(
+  customerId: string,
+): Promise<CustomerAudienceAccess> {
+  const res = await fetch(`${BASE}/customers/${customerId}/audiences`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Catalog access fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateCustomerAudienceAccess(
+  customerId: string,
+  access: CustomerAudienceAccess,
+): Promise<CustomerAudienceAccess> {
+  const res = await fetch(`${BASE}/customers/${customerId}/audiences`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(access),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Catalog access update failed: ${res.status}`);
+  }
+  return res.json();
 }
 
 export interface CatalogVariation {
