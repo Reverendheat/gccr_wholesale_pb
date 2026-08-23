@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
   fetchWholesaleCatalog,
@@ -20,6 +20,10 @@ import {
   type FulfillmentOptions,
   type FulfillmentQuoteResult,
 } from "../lib/api";
+import {
+  groupCatalogByAudience,
+  WHOLESALE_AUDIENCE_SECTIONS,
+} from "../lib/catalog";
 import {
   deliveryPreviewNow,
   estimatedDeliveryDate,
@@ -136,6 +140,10 @@ export default function CustomerPortal() {
       isPreview: preview.overridden,
     };
   });
+  const catalogByAudience = useMemo(
+    () => groupCatalogByAudience(catalog),
+    [catalog],
+  );
 
   useEffect(() => {
     async function load() {
@@ -453,29 +461,36 @@ export default function CustomerPortal() {
         {tab === "catalog" && !loading && (
           <div className="catalog-layout">
             <section className="catalog-grid">
-              <h2>Wholesale Catalog</h2>
-              {catalog.length === 0 && (
-                <p className="muted">No items available.</p>
-              )}
-              {catalog.map((item) => (
-                <div key={item.id} className="catalog-card">
-                  <div className="catalog-card-name">{item.item_data.name}</div>
-                  {item.item_data.description && (
-                    <p className="catalog-card-desc">
-                      {item.item_data.description}
-                    </p>
-                  )}
-                  <div className="catalog-card-variations">
-                    {item.item_data.variations.map((v) => (
-                      <VariationTag
-                        key={v.id}
-                        variation={v}
-                        onAdd={() => addToCart(item, v)}
-                      />
+              {WHOLESALE_AUDIENCE_SECTIONS.map(({ audience, label }) => {
+                const items = catalogByAudience[audience];
+                return (
+                  <div key={audience} className="catalog-audience-section">
+                    <h2>{label}</h2>
+                    {items.length === 0 && (
+                      <p className="muted">No items available.</p>
+                    )}
+                    {items.map((item) => (
+                      <div key={item.id} className="catalog-card">
+                        <div className="catalog-card-name">{item.item_data.name}</div>
+                        {item.item_data.description && (
+                          <p className="catalog-card-desc">
+                            {item.item_data.description}
+                          </p>
+                        )}
+                        <div className="catalog-card-variations">
+                          {item.item_data.variations.map((v) => (
+                            <VariationTag
+                              key={v.id}
+                              variation={v}
+                              onAdd={() => addToCart(item, v)}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </section>
 
             <aside className="cart">

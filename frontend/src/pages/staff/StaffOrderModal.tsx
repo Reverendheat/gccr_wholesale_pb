@@ -14,6 +14,10 @@ import {
   type Order,
   type StaffOrderResult,
 } from "../../lib/api";
+import {
+  groupCatalogByAudience,
+  WHOLESALE_AUDIENCE_SECTIONS,
+} from "../../lib/catalog";
 import "./StaffOrderModal.css";
 
 type CartItem = {
@@ -67,9 +71,13 @@ export default function StaffOrderModal({
   const [quoteState, setQuoteState] = useState<{ key: string; result: FulfillmentQuoteResult } | null>(null);
   const [quoteError, setQuoteError] = useState<{ key: string; message: string } | null>(null);
   const [quotingKey, setQuotingKey] = useState<string | null>(null);
+  const catalogByAudience = useMemo(
+    () => groupCatalogByAudience(catalog),
+    [catalog],
+  );
 
   useEffect(() => {
-    Promise.all([fetchWholesaleCatalog(), fetchFulfillmentOptions()])
+    Promise.all([fetchWholesaleCatalog(customer.id), fetchFulfillmentOptions()])
       .then(([items, fulfillmentOptions]) => {
         setCatalog(items);
         setOptions(fulfillmentOptions);
@@ -86,7 +94,7 @@ export default function StaffOrderModal({
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load order form"))
       .finally(() => setLoading(false));
-  }, [order]);
+  }, [customer.id, order]);
 
   const lineItems = useMemo(
     () => cart.map((item) => ({ variation_id: item.variation.id, quantity: item.quantity })),
@@ -105,7 +113,7 @@ export default function StaffOrderModal({
       setQuotingKey(requestKey);
       setQuoteError(null);
       try {
-        const result = await quoteFulfillment(lineItems, fulfillment, controller.signal);
+        const result = await quoteFulfillment(lineItems, fulfillment, controller.signal, customer.id);
         setQuoteState({ key: requestKey, result });
       } catch (cause: unknown) {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
@@ -120,7 +128,7 @@ export default function StaffOrderModal({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [cart, fulfillment, lineItems, quoteKey]);
+  }, [cart, customer.id, fulfillment, lineItems, quoteKey]);
 
   function addItem(item: CatalogItem, variation: CatalogVariation) {
     setCart((current) => {
@@ -188,15 +196,21 @@ export default function StaffOrderModal({
         {loading ? <p className="muted">Loading catalog…</p> : (
           <form onSubmit={handleSubmit} className="staff-order-form">
             <section>
-              <h4>Catalog</h4>
-              <div className="staff-order-catalog">
-                {catalog.flatMap((item) => item.item_data.variations.map((variation) => (
-                  <button key={variation.id} type="button" onClick={() => addItem(item, variation)}>
-                    <span>{item.item_data.name} — {variation.item_variation_data.name}</span>
-                    <strong>{formatMoney(variation.item_variation_data.price_money?.amount ?? 0)}</strong>
-                  </button>
-                )))}
-              </div>
+              {WHOLESALE_AUDIENCE_SECTIONS.map(({ audience, label }) => (
+                <div key={audience}>
+                  <h4>{label}</h4>
+                  <div className="staff-order-catalog">
+                    {catalogByAudience[audience].flatMap((item) =>
+                      item.item_data.variations.map((variation) => (
+                        <button key={variation.id} type="button" onClick={() => addItem(item, variation)}>
+                          <span>{item.item_data.name} — {variation.item_variation_data.name}</span>
+                          <strong>{formatMoney(variation.item_variation_data.price_money?.amount ?? 0)}</strong>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
             </section>
 
             <section>

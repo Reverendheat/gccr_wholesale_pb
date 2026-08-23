@@ -97,6 +97,8 @@ export interface CatalogVariation {
   };
 }
 
+export type WholesaleAudience = "grocery" | "cafe_restaurant";
+
 export interface CatalogItem {
   id: string;
   type: string;
@@ -105,6 +107,7 @@ export interface CatalogItem {
     description: string;
     variations: CatalogVariation[];
   };
+  wholesale_audiences: WholesaleAudience[];
 }
 
 export interface LineItemInput {
@@ -215,8 +218,11 @@ export interface ScheduledOrder {
   created: string;
 }
 
-export async function fetchWholesaleCatalog(): Promise<CatalogItem[]> {
-  const res = await fetch(`${BASE}/catalog`, { headers: authHeaders() });
+export async function fetchWholesaleCatalog(customerId?: string): Promise<CatalogItem[]> {
+  const query = customerId
+    ? `?${new URLSearchParams({ customer_id: customerId })}`
+    : "";
+  const res = await fetch(`${BASE}/catalog${query}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Catalog fetch failed: ${res.status}`);
   const data = await res.json();
   return data.items ?? [];
@@ -232,11 +238,15 @@ export async function quoteFulfillment(
   lineItems: LineItemInput[],
   fulfillment: Fulfillment,
   signal?: AbortSignal,
+  customerId?: string,
 ): Promise<FulfillmentQuoteResult> {
+  const body = customerId
+    ? { lineItems, fulfillment, customer_id: customerId }
+    : { lineItems, fulfillment };
   const res = await fetch(`${BASE}/fulfillment/quote`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ lineItems, fulfillment }),
+    body: JSON.stringify(body),
     signal,
   });
   if (!res.ok) {
