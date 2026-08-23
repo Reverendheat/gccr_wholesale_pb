@@ -1,8 +1,17 @@
 {
   "mcpServers": {
-    "mcp_square_api": {
+    "square_prod": {
+      "url": "https://mcp.squareup.com/sse",
+      "auth": "oauth"
+    },
+    "square_sandbox": {
+      "transport": "stdio",
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.squareup.com/sse"]
+      "args": ["-y", "square-mcp-server@0.1.2", "start"],
+      "env": {
+        "ACCESS_TOKEN": "${SQUARE_ACCESS_TOKEN}",
+        "SANDBOX": "true"
+      }
     }
   }
 }
