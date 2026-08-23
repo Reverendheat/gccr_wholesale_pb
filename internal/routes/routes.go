@@ -63,6 +63,8 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 	// Staff-controlled customer operations.
 	g.POST("/customers/preview", handlePreviewCustomer(sq))
 	g.PATCH("/customers/{id}/account", handleAssignCustomerAccount())
+	g.GET("/customers/{id}/audiences", handleGetCustomerAudiences(sq))
+	g.PATCH("/customers/{id}/audiences", handleUpdateCustomerAudiences(sq))
 	g.POST("/customers/{id}/orders", handleCreateStaffOrder(sq, deliveryCalculator))
 
 	// POST /api/wholesale/invite — staff confirms account membership and invites a Square customer.
@@ -974,6 +976,84 @@ type previewCustomerBody struct {
 type inviteCustomerBody struct {
 	Email string `json:"email"`
 	accountSelectionBody
+}
+
+type customerAudienceAccess struct {
+	Grocery        bool `json:"grocery"`
+	CafeRestaurant bool `json:"cafe_restaurant"`
+}
+
+type updateCustomerAudiencesBody struct {
+	Grocery        *bool `json:"grocery"`
+	CafeRestaurant *bool `json:"cafe_restaurant"`
+}
+
+func staffLinkedSquareCustomerID(e *core.RequestEvent) (string, error) {
+	if e.Auth == nil || e.Auth.Collection().Name != "users" {
+		return "", e.ForbiddenError("Only staff can manage customer catalog access", nil)
+	}
+	customer, err := e.App.FindRecordById("customers", e.Request.PathValue("id"))
+	if err != nil {
+		return "", e.NotFoundError("Customer not found", err)
+	}
+	squareCustomerID := customer.GetString("squareCustomerId")
+	if squareCustomerID == "" {
+		return "", e.BadRequestError("Customer is not linked to Square", nil)
+	}
+	return squareCustomerID, nil
+}
+
+func customerAudienceAccessFrom(audiences []square.WholesaleAudience) customerAudienceAccess {
+	var access customerAudienceAccess
+	for _, audience := range audiences {
+		switch audience {
+		case square.WholesaleAudienceGrocery:
+			access.Grocery = true
+		case square.WholesaleAudienceCafeRestaurant:
+			access.CafeRestaurant = true
+		}
+	}
+	return access
+}
+
+func handleGetCustomerAudiences(sq *square.Client) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		squareCustomerID, err := staffLinkedSquareCustomerID(e)
+		if err != nil {
+			return err
+		}
+		audiences, err := sq.GetCustomerWholesaleAudiences(e.Request.Context(), squareCustomerID)
+		if err != nil {
+			return e.InternalServerError("Could not fetch customer catalog access", err)
+		}
+		return e.JSON(http.StatusOK, customerAudienceAccessFrom(audiences))
+	}
+}
+
+func handleUpdateCustomerAudiences(sq *square.Client) func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		squareCustomerID, err := staffLinkedSquareCustomerID(e)
+		if err != nil {
+			return err
+		}
+		var body updateCustomerAudiencesBody
+		if err := e.BindBody(&body); err != nil {
+			return e.BadRequestError("Invalid request body", err)
+		}
+		if body.Grocery == nil || body.CafeRestaurant == nil {
+			return e.BadRequestError("grocery and cafe_restaurant are required", nil)
+		}
+		audiences, err := sq.SetCustomerWholesaleAudiences(
+			e.Request.Context(),
+			squareCustomerID,
+			*body.Grocery,
+			*body.CafeRestaurant,
+		)
+		if err != nil {
+			return e.InternalServerError("Could not update customer catalog access", err)
+		}
+		return e.JSON(http.StatusOK, customerAudienceAccessFrom(audiences))
+	}
 }
 
 type squareCustomerDetails struct {

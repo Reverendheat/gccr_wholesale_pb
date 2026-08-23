@@ -2,10 +2,13 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   assignCustomerAccount,
   fetchCompanies,
+  fetchCustomerAudienceAccess,
   fetchCustomers,
   inviteCustomer,
   previewCustomer,
+  updateCustomerAudienceAccess,
   type CompanyRecord,
+  type CustomerAudienceAccess,
   type CustomerRecord,
   type SquareCustomerPreview,
   type StaffOrderResult,
@@ -149,6 +152,97 @@ function InviteModal({
   );
 }
 
+function AudienceAccessModal({
+  customer,
+  onClose,
+  onSaved,
+}: {
+  customer: CustomerRecord;
+  onClose: () => void;
+  onSaved: (access: CustomerAudienceAccess) => void;
+}) {
+  const [access, setAccess] = useState<CustomerAudienceAccess | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCustomerAudienceAccess(customer.id)
+      .then(setAccess)
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not load catalog access");
+      })
+      .finally(() => setLoading(false));
+  }, [customer.id]);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!access) return;
+    setSaving(true);
+    setError(null);
+    try {
+      onSaved(await updateCustomerAudienceAccess(customer.id, access));
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Could not update catalog access");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <h3>Catalog access</h3>
+        <p className="muted modal-desc">
+          Enable the Square wholesale groups for {customer.name || customer.email}.
+        </p>
+        {loading ? <p className="muted">Loading access…</p> : (
+          <form onSubmit={handleSubmit} className="invite-form audience-access-form">
+            <div className="audience-options">
+              <label className="audience-option">
+                <input
+                  type="checkbox"
+                  checked={access?.grocery ?? false}
+                  onChange={(event) => setAccess((current) => current
+                    ? { ...current, grocery: event.target.checked }
+                    : current)}
+                />
+                <span>
+                  Grocery
+                  <small>Seven case-pack coffee offerings</small>
+                </span>
+              </label>
+              <label className="audience-option">
+                <input
+                  type="checkbox"
+                  checked={access?.cafe_restaurant ?? false}
+                  onChange={(event) => setAccess((current) => current
+                    ? { ...current, cafe_restaurant: event.target.checked }
+                    : current)}
+                />
+                <span>
+                  Cafe / Restaurant
+                  <small>Nine bulk coffee and cold brew offerings</small>
+                </span>
+              </label>
+            </div>
+            <p className="muted modal-desc">
+              Customers with neither group see no standard catalog items.
+            </p>
+            {error && <p className="staff-error modal-error">{error}</p>}
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+              <button type="submit" disabled={saving || !access}>
+                {saving ? "Saving…" : "Save access"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Customers() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [companies, setCompanies] = useState<CompanyRecord[]>([]);
@@ -158,6 +252,7 @@ export default function Customers() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [orderingFor, setOrderingFor] = useState<CustomerRecord | null>(null);
+  const [audienceFor, setAudienceFor] = useState<CustomerRecord | null>(null);
 
   useEffect(() => {
     Promise.all([fetchCustomers(), fetchCompanies()])
@@ -179,6 +274,7 @@ export default function Customers() {
   function handleInvited(customer: CustomerRecord) {
     setCustomers((prev) => [customer, ...prev]);
     recordCompany(customer.expand?.company);
+    setAudienceFor(customer);
     setSuccessMsg(`Invite sent to ${customer.email}. They can sign in using a one-time code.`);
     setTimeout(() => setSuccessMsg(null), 6000);
   }
@@ -189,6 +285,19 @@ export default function Customers() {
       ? `Order created for ${customerName}; confirmation email sent.`
       : `Order created for ${customerName}, but confirmation email could not be sent.`);
     setTimeout(() => setSuccessMsg(null), 7000);
+  }
+
+  function handleAudienceSaved(access: CustomerAudienceAccess) {
+    const customerName = audienceFor?.name || audienceFor?.email || "customer";
+    const enabled = [
+      access.grocery ? "Grocery" : "",
+      access.cafe_restaurant ? "Cafe / Restaurant" : "",
+    ].filter(Boolean);
+    setSuccessMsg(enabled.length > 0
+      ? `${customerName} catalog access: ${enabled.join(" and ")}.`
+      : `${customerName} has no standard catalog access.`);
+    setAudienceFor(null);
+    setTimeout(() => setSuccessMsg(null), 6000);
   }
 
   async function saveAccountSelection(
@@ -306,6 +415,9 @@ export default function Customers() {
                   <button type="button" onClick={() => setOrderingFor(customer)} disabled={!customer.squareCustomerId}>
                     Create order
                   </button>
+                  <button type="button" onClick={() => setAudienceFor(customer)} disabled={!customer.squareCustomerId}>
+                    Catalog access
+                  </button>
                 </td>
               </tr>
             ))}
@@ -318,6 +430,14 @@ export default function Customers() {
           customer={orderingFor}
           onClose={() => setOrderingFor(null)}
           onCreated={handleOrderCreated}
+        />
+      )}
+
+      {audienceFor && (
+        <AudienceAccessModal
+          customer={audienceFor}
+          onClose={() => setAudienceFor(null)}
+          onSaved={handleAudienceSaved}
         />
       )}
 
