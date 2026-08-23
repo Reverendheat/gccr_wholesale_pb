@@ -34,15 +34,35 @@ func main() {
 	})
 
 	sqCfg := square.Config{
-		AccessToken:         os.Getenv("SQUARE_ACCESS_TOKEN"),
-		Sandbox:             os.Getenv("SQUARE_SANDBOX") == "true",
-		WholesaleCategoryID: os.Getenv("SQUARE_WHOLESALE_CATEGORY_ID"),
+		AccessToken:                           os.Getenv("SQUARE_ACCESS_TOKEN"),
+		Sandbox:                               os.Getenv("SQUARE_SANDBOX") == "true",
+		WholesaleCategoryID:                   os.Getenv("SQUARE_WHOLESALE_CATEGORY_ID"),
+		WholesaleGroceryGroupID:               os.Getenv("SQUARE_WHOLESALE_GROCERY_GROUP_ID"),
+		WholesaleCafeRestaurantGroupID:        os.Getenv("SQUARE_WHOLESALE_CAFE_RESTAURANT_GROUP_ID"),
+		WholesaleGroceryAttributeID:           os.Getenv("SQUARE_WHOLESALE_GROCERY_ATTRIBUTE_ID"),
+		WholesaleCafeRestaurantAttributeID:    os.Getenv("SQUARE_WHOLESALE_CAFE_RESTAURANT_ATTRIBUTE_ID"),
+		WholesaleCustomerAllowlistAttributeID: os.Getenv("SQUARE_WHOLESALE_CUSTOMER_ALLOWLIST_ATTRIBUTE_ID"),
 	}
 	if sqCfg.AccessToken == "" {
 		log.Fatal("SQUARE_ACCESS_TOKEN environment variable is required")
 	}
 	if sqCfg.WholesaleCategoryID == "" {
 		log.Fatal("SQUARE_WHOLESALE_CATEGORY_ID environment variable is required")
+	}
+	if sqCfg.WholesaleGroceryGroupID == "" {
+		log.Fatal("SQUARE_WHOLESALE_GROCERY_GROUP_ID environment variable is required")
+	}
+	if sqCfg.WholesaleCafeRestaurantGroupID == "" {
+		log.Fatal("SQUARE_WHOLESALE_CAFE_RESTAURANT_GROUP_ID environment variable is required")
+	}
+	if sqCfg.WholesaleGroceryAttributeID == "" {
+		log.Fatal("SQUARE_WHOLESALE_GROCERY_ATTRIBUTE_ID environment variable is required")
+	}
+	if sqCfg.WholesaleCafeRestaurantAttributeID == "" {
+		log.Fatal("SQUARE_WHOLESALE_CAFE_RESTAURANT_ATTRIBUTE_ID environment variable is required")
+	}
+	if sqCfg.WholesaleCustomerAllowlistAttributeID == "" {
+		log.Fatal("SQUARE_WHOLESALE_CUSTOMER_ALLOWLIST_ATTRIBUTE_ID environment variable is required")
 	}
 
 	locationID := os.Getenv("SQUARE_LOCATION_ID")
@@ -67,7 +87,7 @@ func main() {
 		deliveryPolicy,
 	)
 	hooks.Register(app, sq)
-	scheduler.Register(app, sq, locationID, deliveryService)
+	scheduler.Register(app, sq, deliveryService)
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		routes.Register(se, sq, locationID, deliveryService)
