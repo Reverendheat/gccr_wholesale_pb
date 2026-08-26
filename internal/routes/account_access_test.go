@@ -217,6 +217,41 @@ func TestCustomerDetailsIncludesSquareCompanyName(t *testing.T) {
 	}
 }
 
+func TestListStaffCustomersIncludesAuthEmail(t *testing.T) {
+	app := pocketbase.NewWithConfig(pocketbase.Config{DefaultDataDir: t.TempDir(), HideStartBanner: true})
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+	defer app.ResetBootstrapState()
+	if err := app.RunAppMigrations(); err != nil {
+		t.Fatal(err)
+	}
+
+	collection, err := app.FindCollectionByNameOrId("customers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	customer := core.NewRecord(collection)
+	customer.SetEmail("invited@example.com")
+	customer.SetPassword("test-password-12345")
+	customer.Set("name", "Invited Customer")
+	customer.Set("squareCustomerId", "square-invited")
+	if err := app.Save(customer); err != nil {
+		t.Fatal(err)
+	}
+
+	records, err := listStaffCustomers(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("customer count = %d, want 1", len(records))
+	}
+	if got := records[0].PublicExport()["email"]; got != "invited@example.com" {
+		t.Fatalf("exported email = %v, want invited@example.com", got)
+	}
+}
+
 func TestCanCancelScheduledOrder(t *testing.T) {
 	tests := []struct {
 		name       string

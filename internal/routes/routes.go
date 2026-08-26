@@ -61,6 +61,7 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 	g.POST("/invoices", handleSendInvoice(sq, locationID))
 
 	// Staff-controlled customer operations.
+	g.GET("/customers", handleListCustomers())
 	g.POST("/customers/preview", handlePreviewCustomer(sq))
 	g.PATCH("/customers/{id}/account", handleAssignCustomerAccount())
 	g.GET("/customers/{id}/audiences", handleGetCustomerAudiences(sq))
@@ -963,6 +964,34 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 }
 
 // --- customer onboarding and account reconciliation ---
+
+func listStaffCustomers(app core.App) ([]*core.Record, error) {
+	records, err := app.FindRecordsByFilter("customers", "id != ''", "+name", 0, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		if expandErrors := app.ExpandRecord(record, []string{"company"}, nil); len(expandErrors) > 0 {
+			return nil, fmt.Errorf("expand customer %s: %v", record.Id, expandErrors)
+		}
+		record.IgnoreEmailVisibility(true)
+	}
+	return records, nil
+}
+
+func handleListCustomers() func(*core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if e.Auth == nil || e.Auth.Collection().Name != "users" {
+			return e.ForbiddenError("Only staff can list customers", nil)
+		}
+
+		records, err := listStaffCustomers(e.App)
+		if err != nil {
+			return e.InternalServerError("Could not list customers", err)
+		}
+		return e.JSON(http.StatusOK, map[string]any{"customers": records})
+	}
+}
 
 type accountSelectionBody struct {
 	CompanyID      string `json:"company_id"`

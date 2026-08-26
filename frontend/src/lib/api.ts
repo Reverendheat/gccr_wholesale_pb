@@ -31,11 +31,10 @@ export interface CustomerAudienceAccess {
 }
 
 export async function fetchCustomers(): Promise<CustomerRecord[]> {
-  return pb.collection("customers").getFullList<CustomerRecord>({
-    sort: "name",
-    expand: "company",
-    requestKey: null, // disable auto-cancellation so StrictMode double-mount doesn't abort the request
-  });
+  const res = await fetch(`${BASE}/customers`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Customers fetch failed: ${res.status}`);
+  const data = await res.json();
+  return data.customers ?? [];
 }
 
 export async function fetchCompanies(): Promise<CompanyRecord[]> {
