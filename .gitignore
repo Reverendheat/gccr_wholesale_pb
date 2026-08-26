@@ -183,4 +183,5 @@ sketch
 .playwright-mcp/
 .omp/
 pb_data/
+.omp/
 .dev.sh
