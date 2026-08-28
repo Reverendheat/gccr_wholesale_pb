@@ -101,9 +101,10 @@ func handleCatalog(sq *square.Client) func(*core.RequestEvent) error {
 
 // orderLineItemInput is the shape expected in order request bodies.
 type orderLineItemInput struct {
-	VariationID string `json:"variation_id"`
-	Quantity    int    `json:"quantity"`
-	Note        string `json:"note"`
+	VariationID     string `json:"variation_id"`
+	GrindModifierID string `json:"grind_modifier_id"`
+	Quantity        int    `json:"quantity"`
+	Note            string `json:"note"`
 }
 
 type createOrderBody struct {
@@ -168,9 +169,10 @@ func toOrderLineItems(inputs []orderLineItemInput) []orders.LineItem {
 	out := make([]orders.LineItem, len(inputs))
 	for i, li := range inputs {
 		out[i] = orders.LineItem{
-			VariationID: li.VariationID,
-			Quantity:    li.Quantity,
-			Note:        li.Note,
+			VariationID:     li.VariationID,
+			GrindModifierID: li.GrindModifierID,
+			Quantity:        li.Quantity,
+			Note:            li.Note,
 		}
 	}
 	return out
@@ -779,9 +781,10 @@ func handleCreateScheduledOrder(sq *square.Client, deliveryQuoter delivery.Quote
 		lineItemsSnapshot := make([]map[string]any, len(body.LineItems))
 		for i, li := range body.LineItems {
 			lineItemsSnapshot[i] = map[string]any{
-				"variation_id": li.VariationID,
-				"quantity":     li.Quantity,
-				"note":         li.Note,
+				"variation_id":      li.VariationID,
+				"grind_modifier_id": li.GrindModifierID,
+				"quantity":          li.Quantity,
+				"note":              li.Note,
 			}
 		}
 

@@ -1,102 +1,39 @@
-.staff-order-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(15, 23, 42, 0.58);
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-
-.staff-order-modal {
-  width: min(920px, 100%);
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
-  background: var(--surface);
-  border-radius: 14px;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.3);
-  padding: 1.25rem;
-}
-
-.staff-order-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-}
+.staff-order-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: oklch(0.145 0 0 / 0.42); backdrop-filter: blur(2px); }
+.staff-order-modal { width: min(920px, 100%); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.25rem; background: var(--card); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); box-shadow: 0 24px 70px oklch(0.145 0 0 / 0.22); }
+.staff-order-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .staff-order-header h3 { margin: 0; }
-.staff-order-header p { margin: 0.25rem 0 0; color: var(--text-muted); }
+.staff-order-header p { margin: 0.25rem 0 0; color: var(--muted-foreground); }
 .staff-order-form { display: grid; gap: 1rem; }
-.staff-order-form section {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.9rem;
-}
-.staff-order-form h4 { margin: 0 0 0.7rem; }
-
-.staff-order-catalog {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.5rem;
-  max-height: 240px;
-  overflow-y: auto;
-}
-.staff-order-catalog button {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  text-align: left;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-.staff-order-catalog button:hover { border-color: var(--primary); }
-
-.staff-order-cart-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid var(--border);
-}
+.staff-order-form section { padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); }
+.staff-order-form h4 { margin: 0 0 0.75rem; }
+.staff-order-catalog { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.5rem; max-height: 240px; overflow-y: auto; }
+.staff-order-catalog-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.staff-order-catalog-item > span { min-width: 0; font-size: 0.8125rem; font-weight: 550; }
+.staff-order-catalog-item > strong { font-family: var(--font-mono); font-size: 0.75rem; }
+.staff-order-catalog-item label { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.75rem; color: var(--muted-foreground); font-size: 0.75rem; }
+.staff-order-catalog-item select { min-height: 40px; padding-block: 0.45rem; }
+.staff-order-catalog-item > button { grid-column: 1 / -1; width: 100%; }
+.staff-order-cart-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
 .staff-order-cart-row > div { display: flex; align-items: center; gap: 0.5rem; }
-.staff-order-cart-row button { padding: 0.2rem 0.55rem; }
-.staff-order-total { text-align: right; font-weight: 700; margin: 0.7rem 0 0; }
+.staff-order-cart-row button { min-width: 44px; padding: 0.35rem 0.6rem; }
+.staff-order-total { margin: 0.75rem 0 0; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .staff-order-methods { display: flex; gap: 1rem; margin-bottom: 0.8rem; }
-.staff-order-methods label { display: flex; align-items: center; gap: 0.4rem; }
-
-.staff-order-fields { display: grid; gap: 0.7rem; }
+.staff-order-methods label { min-height: 44px; flex-direction: row; align-items: center; gap: 0.5rem; }
+.staff-order-methods input { width: 18px; min-height: 18px; box-shadow: none; }
+.staff-order-fields { display: grid; gap: 0.75rem; }
 .staff-order-fields.two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.staff-order-fields label { display: grid; gap: 0.3rem; font-size: 0.82rem; font-weight: 600; }
-.staff-order-fields input,
-.staff-order-fields textarea {
-  width: 100%;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-}
+.staff-order-fields label { display: grid; gap: 0.35rem; color: var(--muted-foreground); font-size: 0.8rem; font-weight: 600; }
 .staff-order-fields .wide { grid-column: 1 / -1; }
-.staff-order-warning {
-  margin: 0;
-  padding: 0.7rem;
-  border-radius: var(--radius);
-  background: #fff7ed;
-  color: #9a3412;
-  font-size: 0.85rem;
-}
-
+.staff-order-warning { margin: 0; padding: 0.75rem; border: 1px solid color-mix(in oklch, var(--warning) 30%, var(--border)); border-radius: var(--radius); background: var(--warning-soft); color: oklch(0.42 0.11 58); font-size: 0.85rem; }
 .customer-actions { white-space: nowrap; }
-.customer-actions button { padding: 0.4rem 0.65rem; font-size: 0.8rem; }
+.customer-action-buttons { display: inline-flex; align-items: center; gap: 0.5rem; }
+.customer-actions button { padding-inline: 0.75rem; }
 
 @media (max-width: 640px) {
-  .staff-order-backdrop { padding: 0; align-items: end; }
-  .staff-order-modal { max-height: 95dvh; border-radius: 14px 14px 0 0; }
+  .staff-order-backdrop { align-items: end; padding: 0; }
+  .staff-order-modal { max-height: 95dvh; padding: 1rem; border-radius: calc(var(--radius) + 4px) calc(var(--radius) + 4px) 0 0; }
   .staff-order-fields.two-column { grid-template-columns: 1fr; }
   .staff-order-fields .wide { grid-column: auto; }
   .staff-order-cart-row { align-items: flex-start; flex-direction: column; }
+  .staff-order-cart-row > div { width: 100%; justify-content: flex-end; }
 }

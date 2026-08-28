@@ -17,11 +17,17 @@ const (
 	WholesaleAudienceCafeRestaurant WholesaleAudience = "cafe_restaurant"
 )
 
+type GrindOption struct {
+	ModifierID string `json:"modifier_id,omitempty"`
+	Name       string `json:"name"`
+}
+
 type WholesaleCatalogItem struct {
 	ID                 string                 `json:"id"`
 	Type               string                 `json:"type"`
 	ItemData           *squaresdk.CatalogItem `json:"item_data"`
 	WholesaleAudiences []WholesaleAudience    `json:"wholesale_audiences"`
+	GrindOptions       []GrindOption          `json:"grind_options,omitempty"`
 }
 
 func (c *Client) validateWholesaleCatalogConfig() error {
@@ -101,6 +107,67 @@ func customerAllowlist(
 		return true, allowed, true
 	}
 	return false, false, true
+}
+
+func (c *Client) addGrindOptions(ctx context.Context, items []WholesaleCatalogItem) error {
+	modifierListIDs := map[string]struct{}{}
+	for _, item := range items {
+		for _, info := range item.ItemData.ModifierListInfo {
+			if info != nil && info.ModifierListID != "" {
+				modifierListIDs[info.ModifierListID] = struct{}{}
+			}
+		}
+	}
+	if len(modifierListIDs) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(modifierListIDs))
+	for id := range modifierListIDs {
+		ids = append(ids, id)
+	}
+	resp, err := c.SDK.Catalog.BatchGet(ctx, &squaresdk.BatchGetCatalogObjectsRequest{
+		ObjectIDs: ids,
+	})
+	if err != nil {
+		return fmt.Errorf("square: load catalog modifiers: %w", err)
+	}
+
+	optionsByListID := map[string][]GrindOption{}
+	for _, obj := range resp.Objects {
+		if obj == nil || obj.ModifierList == nil || obj.ModifierList.ModifierListData == nil {
+			continue
+		}
+		data := obj.ModifierList.ModifierListData
+		if data.Name == nil || !strings.EqualFold(strings.TrimSpace(*data.Name), "Ground") {
+			continue
+		}
+		for _, modifier := range data.Modifiers {
+			if modifier == nil || modifier.Modifier == nil || modifier.Modifier.ModifierData == nil ||
+				modifier.Modifier.ModifierData.Name == nil ||
+				!strings.EqualFold(strings.TrimSpace(*modifier.Modifier.ModifierData.Name), "Drip") {
+				continue
+			}
+			optionsByListID[obj.ModifierList.ID] = []GrindOption{
+				{Name: "Whole Bean"},
+				{ModifierID: modifier.Modifier.ID, Name: "Drip"},
+			}
+			break
+		}
+	}
+
+	for i := range items {
+		for _, info := range items[i].ItemData.ModifierListInfo {
+			if info == nil {
+				continue
+			}
+			if options := optionsByListID[info.ModifierListID]; len(options) > 0 {
+				items[i].GrindOptions = append([]GrindOption(nil), options...)
+				break
+			}
+		}
+	}
+	return nil
 }
 
 // GetWholesaleCatalog returns fixed-price items visible to the target Square customer.
@@ -194,6 +261,9 @@ func (c *Client) GetWholesaleCatalog(ctx context.Context, squareCustomerID strin
 			ItemData:           obj.Item.ItemData,
 			WholesaleAudiences: audiences,
 		})
+	}
+	if err := c.addGrindOptions(ctx, items); err != nil {
+		return nil, err
 	}
 
 	return items, nil

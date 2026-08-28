@@ -204,7 +204,10 @@ function OrderDrawer({
               <tbody>
                 {order.lineItems.map((li, i) => (
                   <tr key={i}>
-                    <td data-label="Item">{li.name || li.variation_id}</td>
+                    <td data-label="Item">
+                      {li.name || li.variation_id}
+                      {li.grind && ` · ${li.grind}`}
+                    </td>
                     <td data-label="Quantity">{li.quantity}</td>
                     <td data-label="Unit Price">{formatMoney(li.unit_price_cents, li.currency)}</td>
                     <td data-label="Note">{li.note || "—"}</td>
@@ -341,11 +344,19 @@ export default function Orders() {
   if (error) return <p className="staff-error">{error}</p>;
 
   return (
-    <div>
-      <h2>Orders</h2>
+    <div className="staff-view">
+      <div className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Wholesale operations</p>
+          <h1>Orders.</h1>
+          <p className="staff-page-lead">
+            Review incoming orders, update fulfillment status, and send invoices.
+          </p>
+        </div>
+      </div>
       {success && <p className="staff-success">{success}</p>}
       {orders.length === 0 ? (
-        <p className="muted">No orders yet.</p>
+        <div className="staff-empty">No orders yet.</div>
       ) : (
         <table className="orders-table orders-table-clickable">
           <thead>
