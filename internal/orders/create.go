@@ -17,12 +17,14 @@ import (
 // LineItem is an immutable order-time snapshot. Prices are locked when the
 // customer submits the order, before any Square order or invoice is created.
 type LineItem struct {
-	VariationID    string `json:"variation_id"`
-	Name           string `json:"name"`
-	Quantity       int    `json:"quantity"`
-	Note           string `json:"note"`
-	UnitPriceCents int64  `json:"unit_price_cents"`
-	Currency       string `json:"currency"`
+	VariationID     string `json:"variation_id"`
+	Name            string `json:"name"`
+	Quantity        int    `json:"quantity"`
+	Note            string `json:"note"`
+	Grind           string `json:"grind,omitempty"`
+	GrindModifierID string `json:"grind_modifier_id,omitempty"`
+	UnitPriceCents  int64  `json:"unit_price_cents"`
+	Currency        string `json:"currency"`
 }
 
 const (
@@ -74,7 +76,11 @@ func LockPrices(ctx context.Context, sq *square.Client, squareCustomerID string,
 		return nil, err
 	}
 
-	available := make(map[string]LineItem)
+	type availableLineItem struct {
+		snapshot     LineItem
+		grindOptions map[string]string
+	}
+	available := make(map[string]availableLineItem)
 	for _, item := range catalog {
 		if item.ItemData == nil {
 			continue
@@ -82,6 +88,10 @@ func LockPrices(ctx context.Context, sq *square.Client, squareCustomerID string,
 		itemName := ""
 		if item.ItemData.Name != nil {
 			itemName = *item.ItemData.Name
+		}
+		grindOptions := make(map[string]string, len(item.GrindOptions))
+		for _, option := range item.GrindOptions {
+			grindOptions[option.ModifierID] = option.Name
 		}
 		for _, variation := range item.ItemData.Variations {
 			if variation == nil || variation.ItemVariation == nil || variation.ItemVariation.ID == "" || variation.ItemVariation.ItemVariationData == nil {
@@ -101,20 +111,36 @@ func LockPrices(ctx context.Context, sq *square.Client, squareCustomerID string,
 			if data.Name != nil && *data.Name != "" && !strings.EqualFold(*data.Name, "Default") {
 				name = strings.TrimSpace(itemName + " - " + *data.Name)
 			}
-			available[variation.ItemVariation.ID] = LineItem{
-				VariationID:    variation.ItemVariation.ID,
-				Name:           name,
-				UnitPriceCents: *price.Amount,
-				Currency:       string(*price.Currency),
+			available[variation.ItemVariation.ID] = availableLineItem{
+				snapshot: LineItem{
+					VariationID:    variation.ItemVariation.ID,
+					Name:           name,
+					UnitPriceCents: *price.Amount,
+					Currency:       string(*price.Currency),
+				},
+				grindOptions: grindOptions,
 			}
 		}
 	}
 
 	locked := make([]LineItem, len(requested))
 	for i, item := range requested {
-		snapshot, ok := available[item.VariationID]
+		availableItem, ok := available[item.VariationID]
 		if !ok {
 			return nil, fmt.Errorf("variation %q is unavailable in the wholesale catalog", item.VariationID)
+		}
+		snapshot := availableItem.snapshot
+		if len(availableItem.grindOptions) == 0 {
+			if item.GrindModifierID != "" {
+				return nil, fmt.Errorf("variation %q does not support grind modifiers", item.VariationID)
+			}
+		} else {
+			grind, ok := availableItem.grindOptions[item.GrindModifierID]
+			if !ok {
+				return nil, fmt.Errorf("grind modifier %q is unavailable for variation %q", item.GrindModifierID, item.VariationID)
+			}
+			snapshot.Grind = grind
+			snapshot.GrindModifierID = item.GrindModifierID
 		}
 		snapshot.Quantity = item.Quantity
 		snapshot.Note = item.Note
@@ -363,6 +389,18 @@ func toSquareLineItems(items []LineItem) ([]*squaresdk.OrderLineItem, error) {
 				Amount:   squaresdk.Int64(item.UnitPriceCents),
 				Currency: &currency,
 			},
+		}
+		if item.GrindModifierID != "" {
+			out[i].Modifiers = []*squaresdk.OrderLineItemModifier{{
+				CatalogObjectID: squaresdk.String(item.GrindModifierID),
+				Name:            squaresdk.String(item.Grind),
+			}}
+		} else if item.Grind == "Whole Bean" {
+			note := strings.TrimSpace(item.Note)
+			if note != "" {
+				note += "\n"
+			}
+			out[i].Note = squaresdk.String(note + "Grind: Whole Bean")
 		}
 	}
 	return out, nil

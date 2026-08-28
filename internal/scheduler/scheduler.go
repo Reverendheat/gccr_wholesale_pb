@@ -68,10 +68,12 @@ func processOne(app core.App, sq *square.Client, deliveryQuoter delivery.Quoter,
 			qty = int(q)
 		}
 		note, _ := li["note"].(string)
+		grindModifierID, _ := li["grind_modifier_id"].(string)
 		items = append(items, orders.LineItem{
-			VariationID: fmt.Sprint(li["variation_id"]),
-			Quantity:    qty,
-			Note:        note,
+			VariationID:     fmt.Sprint(li["variation_id"]),
+			GrindModifierID: grindModifierID,
+			Quantity:        qty,
+			Note:            note,
 		})
 	}
 

@@ -27,10 +27,18 @@ export default function Invoices() {
   if (error) return <p className="staff-error">{error}</p>;
 
   return (
-    <div>
-      <h2>Invoices</h2>
+    <div className="staff-view">
+      <div className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Wholesale operations</p>
+          <h1>Invoices.</h1>
+          <p className="staff-page-lead">
+            Open Square invoices and track the orders already sent for payment.
+          </p>
+        </div>
+      </div>
       {invoiced.length === 0 ? (
-        <p className="muted">No invoices sent yet.</p>
+        <div className="staff-empty">No invoices sent yet.</div>
       ) : (
         <table className="orders-table">
           <thead>

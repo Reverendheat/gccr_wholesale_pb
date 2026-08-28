@@ -39,6 +39,9 @@ func TestLockPricesSnapshotsSubmissionPrice(t *testing.T) {
 					},
 					"item_data": map[string]any{
 						"name": "Wholesale Coffee",
+						"modifier_list_info": []map[string]any{{
+							"modifier_list_id": "GROUND_LIST", "enabled": true,
+						}},
 						"variations": []map[string]any{{
 							"id": "VAR1", "type": "ITEM_VARIATION",
 							"item_variation_data": map[string]any{
@@ -72,6 +75,20 @@ func TestLockPricesSnapshotsSubmissionPrice(t *testing.T) {
 					},
 				},
 			}})
+		case "/v2/catalog/batch-retrieve":
+			_ = json.NewEncoder(w).Encode(map[string]any{"objects": []map[string]any{{
+				"id": "GROUND_LIST", "type": "MODIFIER_LIST",
+				"modifier_list_data": map[string]any{
+					"name": "Ground", "selection_type": "SINGLE",
+					"modifiers": []map[string]any{{
+						"id": "DRIP", "type": "MODIFIER",
+						"modifier_data": map[string]any{
+							"name":        "Drip",
+							"price_money": map[string]any{"amount": 0, "currency": "USD"},
+						},
+					}},
+				},
+			}}})
 		default:
 			http.NotFound(w, r)
 		}
@@ -87,12 +104,28 @@ func TestLockPricesSnapshotsSubmissionPrice(t *testing.T) {
 		WholesaleCafeRestaurantAttributeID:    "CAFE_ATTRIBUTE",
 		WholesaleCustomerAllowlistAttributeID: "ALLOWLIST_ATTRIBUTE",
 	}
-	items, err := LockPrices(context.Background(), sq, "SQUARE_CUSTOMER", []LineItem{{VariationID: "VAR1", Quantity: 2}})
+	items, err := LockPrices(context.Background(), sq, "SQUARE_CUSTOMER", []LineItem{{
+		VariationID: "VAR1", GrindModifierID: "DRIP", Quantity: 2,
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].Name != "Wholesale Coffee - 5 lb" || items[0].UnitPriceCents != 1000 || items[0].Currency != "USD" {
+	if len(items) != 1 || items[0].Name != "Wholesale Coffee - 5 lb" ||
+		items[0].UnitPriceCents != 1000 || items[0].Currency != "USD" ||
+		items[0].Grind != "Drip" || items[0].GrindModifierID != "DRIP" {
 		t.Fatalf("unexpected locked item: %+v", items)
+	}
+	wholeBean, err := LockPrices(context.Background(), sq, "SQUARE_CUSTOMER", []LineItem{{
+		VariationID: "VAR1", Quantity: 1,
+	}})
+	if err != nil || len(wholeBean) != 1 || wholeBean[0].Grind != "Whole Bean" {
+		t.Fatalf("whole bean lock = %+v, err = %v", wholeBean, err)
+	}
+	_, err = LockPrices(context.Background(), sq, "SQUARE_CUSTOMER", []LineItem{{
+		VariationID: "VAR1", GrindModifierID: "UNKNOWN", Quantity: 1,
+	}})
+	if err == nil || err.Error() != `grind modifier "UNKNOWN" is unavailable for variation "VAR1"` {
+		t.Fatalf("unknown grind error = %v", err)
 	}
 	_, err = LockPrices(context.Background(), sq, "SQUARE_CUSTOMER", []LineItem{{VariationID: "HIDDEN_VAR", Quantity: 1}})
 	if err == nil || err.Error() != `variation "HIDDEN_VAR" is unavailable in the wholesale catalog` {
@@ -286,7 +319,8 @@ func TestUpdatePendingRejectsOrderAlreadySubmittedToSquare(t *testing.T) {
 func TestSubmitToSquareUsesLockedPriceAndPersistsSquareID(t *testing.T) {
 	app, customer := newOrderTestApp(t)
 	order, err := Create(app, customer.Id, "", []LineItem{{
-		VariationID: "VAR1", Name: "Coffee", Quantity: 2, Note: "fine", UnitPriceCents: 1250, Currency: "USD",
+		VariationID: "VAR1", Name: "Coffee", Quantity: 2, Note: "fine",
+		Grind: "Drip", GrindModifierID: "DRIP", UnitPriceCents: 1250, Currency: "USD",
 	}}, Fulfillment{Method: FulfillmentPickup}, "")
 	if err != nil {
 		t.Fatal(err)
@@ -302,6 +336,10 @@ func TestSubmitToSquareUsesLockedPriceAndPersistsSquareID(t *testing.T) {
 		price := lineItem["base_price_money"].(map[string]any)
 		if price["amount"] != float64(1250) || price["currency"] != "USD" {
 			t.Fatalf("Square price = %v, want locked USD 1250", price)
+		}
+		modifiers := lineItem["modifiers"].([]any)
+		if len(modifiers) != 1 || modifiers[0].(map[string]any)["catalog_object_id"] != "DRIP" {
+			t.Fatalf("Square modifiers = %v, want DRIP", modifiers)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"order": map[string]any{

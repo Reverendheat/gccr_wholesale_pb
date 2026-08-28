@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
   fetchWholesaleCatalog,
@@ -13,6 +13,7 @@ import {
   quoteFulfillment,
   type CatalogItem,
   type CatalogVariation,
+  type GrindOption,
   type Order,
   type ScheduledOrder,
   type ScheduleFrequency,
@@ -35,7 +36,13 @@ type CartItem = {
   variation: CatalogVariation;
   itemName: string;
   quantity: number;
+  grindName?: string;
+  grindModifierId?: string;
 };
+
+function cartItemKey(variationId: string, grindModifierId = ""): string {
+  return `${variationId}:${grindModifierId}`;
+}
 
 const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {
   weekly: "Weekly",
@@ -79,18 +86,43 @@ function validateFulfillment(fulfillment: Fulfillment): string | null {
 
 function VariationTag({
   variation,
+  grindOptions,
   onAdd,
 }: {
   variation: CatalogVariation;
-  onAdd: () => void;
+  grindOptions: GrindOption[];
+  onAdd: (grind?: GrindOption) => void;
 }) {
   const { name, price_money } = variation.item_variation_data;
+  const [grindModifierId, setGrindModifierId] = useState(
+    grindOptions[0]?.modifier_id ?? "",
+  );
+  const selectedGrind = grindOptions.find(
+    (option) => (option.modifier_id ?? "") === grindModifierId,
+  );
+
   return (
     <div className="variation">
       <span className="variation-name">{name}</span>
+      {grindOptions.length > 0 && (
+        <label className="variation-grind">
+          Grind
+          <select
+            value={grindModifierId}
+            onChange={(event) => setGrindModifierId(event.target.value)}
+            aria-label={`Grind for ${name}`}
+          >
+            {grindOptions.map((option) => (
+              <option key={option.modifier_id ?? "whole-bean"} value={option.modifier_id ?? ""}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <span className="variation-price">{formatPrice(price_money?.amount)}</span>
-      <button className="btn-add" onClick={onAdd}>
-        + Add
+      <button type="button" className="btn-add" onClick={() => onAdd(selectedGrind)}>
+        Add
       </button>
     </div>
   );
@@ -118,6 +150,10 @@ export default function CustomerPortal() {
     instructions: "",
   });
   const [tab, setTab] = useState<"catalog" | "orders" | "scheduled">("catalog");
+  const [catalogAudience, setCatalogAudience] = useState<"grocery" | "cafe_restaurant">("grocery");
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const mobileCartTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileCartCloseRef = useRef<HTMLButtonElement>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
@@ -144,6 +180,10 @@ export default function CustomerPortal() {
     () => groupCatalogByAudience(catalog),
     [catalog],
   );
+  const activeCatalogSection = WHOLESALE_AUDIENCE_SECTIONS.find(
+    ({ audience }) => audience === catalogAudience,
+  ) ?? WHOLESALE_AUDIENCE_SECTIONS[0];
+  const activeCatalogItems = catalogByAudience[activeCatalogSection.audience];
 
   useEffect(() => {
     async function load() {
@@ -166,38 +206,70 @@ export default function CustomerPortal() {
     }
     load();
   }, []);
+  useEffect(() => {
+    if (!mobileCartOpen) return;
 
-  function addToCart(item: CatalogItem, variation: CatalogVariation) {
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileCartOpen(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    mobileCartCloseRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      mobileCartTriggerRef.current?.focus();
+    };
+  }, [mobileCartOpen]);
+
+  function addToCart(item: CatalogItem, variation: CatalogVariation, grind?: GrindOption) {
+    const grindModifierId = grind?.modifier_id ?? "";
+    const key = cartItemKey(variation.id, grindModifierId);
     setCart((prev) => {
-      const existing = prev.find((c) => c.variation.id === variation.id);
+      const existing = prev.find(
+        (entry) => cartItemKey(entry.variation.id, entry.grindModifierId) === key,
+      );
       if (existing) {
-        return prev.map((c) =>
-          c.variation.id === variation.id
-            ? { ...c, quantity: c.quantity + 1 }
-            : c
+        return prev.map((entry) =>
+          cartItemKey(entry.variation.id, entry.grindModifierId) === key
+            ? { ...entry, quantity: entry.quantity + 1 }
+            : entry
         );
       }
-      return [...prev, { variation, itemName: item.item_data.name, quantity: 1 }];
+      return [...prev, {
+        variation,
+        itemName: item.item_data.name,
+        quantity: 1,
+        grindName: grind?.name,
+        grindModifierId: grind?.modifier_id,
+      }];
     });
   }
 
-  function updateQty(variationId: string, qty: number) {
+  function updateQty(key: string, qty: number) {
     if (qty <= 0) {
-      setCart((prev) => prev.filter((c) => c.variation.id !== variationId));
+      setCart((prev) => prev.filter(
+        (entry) => cartItemKey(entry.variation.id, entry.grindModifierId) !== key,
+      ));
     } else {
       setCart((prev) =>
-        prev.map((c) =>
-          c.variation.id === variationId ? { ...c, quantity: qty } : c
+        prev.map((entry) =>
+          cartItemKey(entry.variation.id, entry.grindModifierId) === key
+            ? { ...entry, quantity: qty }
+            : entry
         )
       );
     }
   }
 
-
   const lineItemsFromCart = () =>
-    cart.map((c) => ({
-      variation_id: c.variation.id,
-      quantity: c.quantity,
+    cart.map((item) => ({
+      variation_id: item.variation.id,
+      grind_modifier_id: item.grindModifierId,
+      quantity: item.quantity,
     }));
 
   function updateFulfillment(field: keyof Fulfillment, value: string) {
@@ -217,6 +289,8 @@ export default function CustomerPortal() {
             variation,
             itemName: item.item_data.name,
             quantity: lineItem.quantity,
+            grindName: lineItem.grind,
+            grindModifierId: lineItem.grind_modifier_id,
           };
           break;
         }
@@ -419,37 +493,53 @@ export default function CustomerPortal() {
   return (
     <div className="portal-shell">
       <header className="portal-header">
-        <img src="/logo.png" alt="Logo" className="portal-logo" />
-        <div className="portal-header-right">
-          <span className="portal-user">{user?.email}</span>
-          <button onClick={logout} className="portal-logout">
-            Sign out
-          </button>
+        <div className="portal-header-inner">
+          <div className="portal-brand">
+            <img src="/logo.png" alt="" className="portal-brand-logo" />
+            <span>Ground Control <span>/ Wholesale</span></span>
+          </div>
+          <div className="portal-header-right">
+            <span className="portal-user">{user?.email}</span>
+            <button type="button" onClick={logout} className="portal-logout">
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="portal-tabs">
-        <button
-          className={tab === "catalog" ? "active" : ""}
-          onClick={() => setTab("catalog")}
-        >
-          Order
-        </button>
-        <button
-          className={tab === "orders" ? "active" : ""}
-          onClick={() => setTab("orders")}
-        >
-          Account Orders
-        </button>
-        <button
-          className={tab === "scheduled" ? "active" : ""}
-          onClick={() => setTab("scheduled")}
-        >
-          Scheduled
-          {scheduledOrders.length > 0 && (
-            <span className="tab-badge">{scheduledOrders.length}</span>
-          )}
-        </button>
+      <div className="portal-tabs" role="tablist" aria-label="Customer portal">
+        <div className="portal-tabs-inner">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "catalog"}
+            className={tab === "catalog" ? "active" : ""}
+            onClick={() => setTab("catalog")}
+          >
+            Order
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "orders"}
+            className={tab === "orders" ? "active" : ""}
+            onClick={() => setTab("orders")}
+          >
+            Account Orders
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "scheduled"}
+            className={tab === "scheduled" ? "active" : ""}
+            onClick={() => setTab("scheduled")}
+          >
+            Scheduled
+            {scheduledOrders.length > 0 && (
+              <span className="tab-badge">{scheduledOrders.length}</span>
+            )}
+          </button>
+        </div>
       </div>
 
       <main className="portal-main">
@@ -459,45 +549,107 @@ export default function CustomerPortal() {
 
         {/* CATALOG + CART */}
         {tab === "catalog" && !loading && (
-          <div className="catalog-layout">
-            <section className="catalog-grid">
-              {WHOLESALE_AUDIENCE_SECTIONS.map(({ audience, label }) => {
-                const items = catalogByAudience[audience];
-                return (
-                  <div key={audience} className="catalog-audience-section">
-                    <h2>{label}</h2>
-                    {items.length === 0 ? (
-                      <p className="muted">No items available.</p>
-                    ) : (
-                      <div className="catalog-audience-items">
-                        {items.map((item) => (
-                          <div key={item.id} className="catalog-card">
-                            <div className="catalog-card-name">{item.item_data.name}</div>
-                            {item.item_data.description && (
-                              <p className="catalog-card-desc">
-                                {item.item_data.description}
-                              </p>
-                            )}
-                            <div className="catalog-card-variations">
-                              {item.item_data.variations.map((v) => (
-                                <VariationTag
-                                  key={v.id}
-                                  variation={v}
-                                  onAdd={() => addToCart(item, v)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
+          <section className="catalog-section">
+            <div className="catalog-heading">
+              <div>
+                <p className="eyebrow">Wholesale catalog · Live inventory</p>
+                <h1>Build your order.</h1>
+                <p className="catalog-lead">
+                  Choose a catalog, add available case packs, then confirm pickup or delivery.
+                </p>
+              </div>
+              <div className="catalog-filters" role="group" aria-label="Catalog">
+                {WHOLESALE_AUDIENCE_SECTIONS.map(({ audience, label }) => (
+                  <button
+                    type="button"
+                    key={audience}
+                    className={catalogAudience === audience ? "active" : ""}
+                    aria-pressed={catalogAudience === audience}
+                    onClick={() => setCatalogAudience(audience)}
+                  >
+                    {label} · {catalogByAudience[audience].length}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            <aside className="cart">
-              <h2>{editingOrderId ? "Edit Order" : "Your Order"}</h2>
+            <div className="catalog-layout">
+              <section className="catalog-grid" aria-label={`${activeCatalogSection.label} catalog`}>
+                <div className="catalog-status" role="status">
+                  {activeCatalogSection.label} catalog · {activeCatalogItems.length} items available
+                </div>
+                {activeCatalogItems.length === 0 ? (
+                  <div className="catalog-empty">
+                    <h3>No items available</h3>
+                    <p>This account does not currently have items in this catalog.</p>
+                  </div>
+                ) : (
+                  <div className="catalog-audience-items">
+                    {activeCatalogItems.map((item, index) => (
+                      <article key={item.id} className="catalog-card">
+                        <div className="catalog-card-top">
+                          <span className="catalog-pill">Live Square item</span>
+                          <span className="catalog-index">
+                            {activeCatalogSection.audience === "grocery" ? "G" : "C"}–{String(index + 1).padStart(2, "0")}
+                          </span>
+                        </div>
+                        <h3 className="catalog-card-name">{item.item_data.name}</h3>
+                        {item.item_data.description && (
+                          <p className="catalog-card-desc">
+                            {item.item_data.description}
+                          </p>
+                        )}
+                        <div className="catalog-card-variations">
+                          {item.item_data.variations.map((variation) => (
+                            <VariationTag
+                              key={variation.id}
+                              variation={variation}
+                              grindOptions={item.grind_options ?? []}
+                              onAdd={(grind) => addToCart(item, variation, grind)}
+                            />
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <button
+                type="button"
+                ref={mobileCartTriggerRef}
+                className="mobile-cart-bar"
+                onClick={() => setMobileCartOpen(true)}
+                aria-expanded={mobileCartOpen}
+              >
+                <span>
+                  <strong>Your order · {cart.reduce((total, item) => total + item.quantity, 0)} items</strong>
+                  <small>{cart.length > 0 ? formatPrice(cartTotal) : "Add items to begin"}</small>
+                </span>
+                <span>Review order</span>
+              </button>
+              <div
+                className={`mobile-cart-backdrop${mobileCartOpen ? " open" : ""}`}
+                onClick={() => setMobileCartOpen(false)}
+                aria-hidden="true"
+              />
+
+              <aside className={`cart${mobileCartOpen ? " open" : ""}`} aria-label="Your order">
+                <div className="cart-head">
+                  <h2>{editingOrderId ? "Edit Order" : "Your Order"}</h2>
+                  <span className="cart-count">
+                    {cart.reduce((total, item) => total + item.quantity, 0)}
+                  </span>
+                  <button
+                    type="button"
+                    ref={mobileCartCloseRef}
+                    className="mobile-cart-close"
+                    onClick={() => setMobileCartOpen(false)}
+                    aria-label="Close order"
+                  >
+                    ×
+                  </button>
+                </div>
               {editingOrderId && (
                 <p className="muted">Changes are allowed while this order is pending.</p>
               )}
@@ -507,17 +659,18 @@ export default function CustomerPortal() {
                 <>
                   <ul className="cart-list">
                     {cart.map((c) => (
-                      <li key={c.variation.id} className="cart-item">
+                      <li key={cartItemKey(c.variation.id, c.grindModifierId)} className="cart-item">
                         <div className="cart-item-info">
                           <span className="cart-item-name">{c.itemName}</span>
                           <span className="cart-item-variation">
                             {c.variation.item_variation_data.name}
+                            {c.grindName && ` · ${c.grindName}`}
                           </span>
                         </div>
                         <div className="cart-item-controls">
                           <button
                             onClick={() =>
-                              updateQty(c.variation.id, c.quantity - 1)
+                              updateQty(cartItemKey(c.variation.id, c.grindModifierId), c.quantity - 1)
                             }
                           >
                             −
@@ -525,7 +678,7 @@ export default function CustomerPortal() {
                           <span>{c.quantity}</span>
                           <button
                             onClick={() =>
-                              updateQty(c.variation.id, c.quantity + 1)
+                              updateQty(cartItemKey(c.variation.id, c.grindModifierId), c.quantity + 1)
                             }
                           >
                             +
@@ -751,6 +904,7 @@ export default function CustomerPortal() {
               )}
             </aside>
           </div>
+          </section>
         )}
 
         {/* ORDERS */}
@@ -841,6 +995,7 @@ export default function CustomerPortal() {
                                       {li.name ??
                                         variationNames[li.variation_id] ??
                                         li.variation_id}
+                                      {li.grind && ` · ${li.grind}`}
                                     </span>
                                     <span className="order-detail-qty">
                                       × {li.quantity}

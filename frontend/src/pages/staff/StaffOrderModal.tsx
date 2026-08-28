@@ -7,6 +7,7 @@ import {
   updateStaffOrder,
   type CatalogItem,
   type CatalogVariation,
+  type GrindOption,
   type CustomerRecord,
   type Fulfillment,
   type FulfillmentOptions,
@@ -24,7 +25,13 @@ type CartItem = {
   itemName: string;
   variation: CatalogVariation;
   quantity: number;
+  grindName?: string;
+  grindModifierId?: string;
 };
+
+function cartItemKey(variationId: string, grindModifierId = ""): string {
+  return `${variationId}:${grindModifierId}`;
+}
 
 function formatMoney(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -57,6 +64,7 @@ export default function StaffOrderModal({
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [options, setOptions] = useState<FulfillmentOptions | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [grindByVariation, setGrindByVariation] = useState<Record<string, string>>({});
   const [fulfillment, setFulfillment] = useState<Fulfillment>(order?.fulfillment ?? {
     method: "pickup",
     recipient_name: customer.name,
@@ -85,7 +93,15 @@ export default function StaffOrderModal({
           const existingCart = order.lineItems.map((lineItem) => {
             for (const item of items) {
               const variation = item.item_data.variations.find((candidate) => candidate.id === lineItem.variation_id);
-              if (variation) return { itemName: item.item_data.name, variation, quantity: lineItem.quantity };
+              if (variation) {
+                return {
+                  itemName: item.item_data.name,
+                  variation,
+                  quantity: lineItem.quantity,
+                  grindName: lineItem.grind,
+                  grindModifierId: lineItem.grind_modifier_id,
+                };
+              }
             }
             throw new Error(`Order item ${lineItem.name || lineItem.variation_id} is no longer available`);
           });
@@ -97,7 +113,11 @@ export default function StaffOrderModal({
   }, [customer.id, order]);
 
   const lineItems = useMemo(
-    () => cart.map((item) => ({ variation_id: item.variation.id, quantity: item.quantity })),
+    () => cart.map((item) => ({
+      variation_id: item.variation.id,
+      grind_modifier_id: item.grindModifierId,
+      quantity: item.quantity,
+    })),
     [cart],
   );
   const quoteKey = JSON.stringify({ lineItems, fulfillment });
@@ -130,22 +150,38 @@ export default function StaffOrderModal({
     };
   }, [cart, customer.id, fulfillment, lineItems, quoteKey]);
 
-  function addItem(item: CatalogItem, variation: CatalogVariation) {
+  function addItem(item: CatalogItem, variation: CatalogVariation, grind?: GrindOption) {
+    const grindModifierId = grind?.modifier_id ?? "";
+    const key = cartItemKey(variation.id, grindModifierId);
     setCart((current) => {
-      const existing = current.find((entry) => entry.variation.id === variation.id);
+      const existing = current.find(
+        (entry) => cartItemKey(entry.variation.id, entry.grindModifierId) === key,
+      );
       if (existing) {
-        return current.map((entry) => entry.variation.id === variation.id
-          ? { ...entry, quantity: entry.quantity + 1 }
-          : entry);
+        return current.map((entry) =>
+          cartItemKey(entry.variation.id, entry.grindModifierId) === key
+            ? { ...entry, quantity: entry.quantity + 1 }
+            : entry
+        );
       }
-      return [...current, { itemName: item.item_data.name, variation, quantity: 1 }];
+      return [...current, {
+        itemName: item.item_data.name,
+        variation,
+        quantity: 1,
+        grindName: grind?.name,
+        grindModifierId: grind?.modifier_id,
+      }];
     });
   }
 
-  function updateQuantity(id: string, quantity: number) {
+  function updateQuantity(key: string, quantity: number) {
     setCart((current) => quantity <= 0
-      ? current.filter((entry) => entry.variation.id !== id)
-      : current.map((entry) => entry.variation.id === id ? { ...entry, quantity } : entry));
+      ? current.filter((entry) => cartItemKey(entry.variation.id, entry.grindModifierId) !== key)
+      : current.map((entry) =>
+          cartItemKey(entry.variation.id, entry.grindModifierId) === key
+            ? { ...entry, quantity }
+            : entry
+        ));
   }
 
   function updateFulfillment(field: keyof Fulfillment, value: string) {
@@ -201,12 +237,41 @@ export default function StaffOrderModal({
                   <h4>{label}</h4>
                   <div className="staff-order-catalog">
                     {catalogByAudience[audience].flatMap((item) =>
-                      item.item_data.variations.map((variation) => (
-                        <button key={variation.id} type="button" onClick={() => addItem(item, variation)}>
-                          <span>{item.item_data.name} — {variation.item_variation_data.name}</span>
-                          <strong>{formatMoney(variation.item_variation_data.price_money?.amount ?? 0)}</strong>
-                        </button>
-                      ))
+                      item.item_data.variations.map((variation) => {
+                        const grindOptions = item.grind_options ?? [];
+                        const selectedModifierId = grindByVariation[variation.id] ??
+                          grindOptions[0]?.modifier_id ?? "";
+                        const selectedGrind = grindOptions.find(
+                          (option) => (option.modifier_id ?? "") === selectedModifierId,
+                        );
+                        return (
+                          <div className="staff-order-catalog-item" key={variation.id}>
+                            <span>{item.item_data.name} — {variation.item_variation_data.name}</span>
+                            <strong>{formatMoney(variation.item_variation_data.price_money?.amount ?? 0)}</strong>
+                            {grindOptions.length > 0 && (
+                              <label>
+                                Grind
+                                <select
+                                  value={selectedModifierId}
+                                  onChange={(event) => setGrindByVariation((current) => ({
+                                    ...current,
+                                    [variation.id]: event.target.value,
+                                  }))}
+                                >
+                                  {grindOptions.map((option) => (
+                                    <option key={option.modifier_id ?? "whole-bean"} value={option.modifier_id ?? ""}>
+                                      {option.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            )}
+                            <button type="button" onClick={() => addItem(item, variation, selectedGrind)}>
+                              Add
+                            </button>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -215,16 +280,22 @@ export default function StaffOrderModal({
 
             <section>
               <h4>Order</h4>
-              {cart.length === 0 ? <p className="muted">No items added.</p> : cart.map((item) => (
-                <div className="staff-order-cart-row" key={item.variation.id}>
-                  <span>{item.itemName} — {item.variation.item_variation_data.name}</span>
-                  <div>
-                    <button type="button" onClick={() => updateQuantity(item.variation.id, item.quantity - 1)}>−</button>
-                    <span>{item.quantity}</span>
-                    <button type="button" onClick={() => updateQuantity(item.variation.id, item.quantity + 1)}>+</button>
+              {cart.length === 0 ? <p className="muted">No items added.</p> : cart.map((item) => {
+                const key = cartItemKey(item.variation.id, item.grindModifierId);
+                return (
+                  <div className="staff-order-cart-row" key={key}>
+                    <span>
+                      {item.itemName} — {item.variation.item_variation_data.name}
+                      {item.grindName && ` · ${item.grindName}`}
+                    </span>
+                    <div>
+                      <button type="button" onClick={() => updateQuantity(key, item.quantity - 1)}>−</button>
+                      <span>{item.quantity}</span>
+                      <button type="button" onClick={() => updateQuantity(key, item.quantity + 1)}>+</button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <p className="staff-order-total">Merchandise subtotal: {formatMoney(subtotal)}</p>
               {quote && (
                 <p className="staff-order-total">

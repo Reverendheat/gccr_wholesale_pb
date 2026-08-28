@@ -353,17 +353,23 @@ export default function Customers() {
   if (loading) return <p className="muted">Loading customers…</p>;
 
   return (
-    <div>
-      <div className="section-header">
-        <h2>Customers</h2>
-        <button onClick={() => setShowInvite(true)}>+ Invite Customer</button>
+    <div className="staff-view">
+      <div className="staff-page-heading">
+        <div>
+          <p className="eyebrow">Account directory</p>
+          <h1>Customers.</h1>
+          <p className="staff-page-lead">
+            Invite buyers, manage wholesale accounts, and control catalog access.
+          </p>
+        </div>
+        <button type="button" onClick={() => setShowInvite(true)}>Invite customer</button>
       </div>
 
       {error && <p className="staff-error">{error}</p>}
       {successMsg && <p className="staff-success">{successMsg}</p>}
 
       {customers.length === 0 ? (
-        <p className="muted">No customers yet. Use button above to invite one.</p>
+        <div className="staff-empty">No customers yet. Invite the first wholesale buyer.</div>
       ) : (
         <table className="orders-table">
           <thead>
@@ -412,12 +418,14 @@ export default function Customers() {
                 </td>
                 <td data-label="Registered">{formatDate(customer.created)}</td>
                 <td className="customer-actions" data-label="Actions">
-                  <button type="button" onClick={() => setOrderingFor(customer)} disabled={!customer.squareCustomerId}>
-                    Create order
-                  </button>
-                  <button type="button" onClick={() => setAudienceFor(customer)} disabled={!customer.squareCustomerId}>
-                    Catalog access
-                  </button>
+                  <div className="customer-action-buttons">
+                    <button type="button" onClick={() => setOrderingFor(customer)} disabled={!customer.squareCustomerId}>
+                      Create order
+                    </button>
+                    <button type="button" onClick={() => setAudienceFor(customer)} disabled={!customer.squareCustomerId}>
+                      Catalog access
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

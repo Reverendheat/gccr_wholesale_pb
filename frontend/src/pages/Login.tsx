@@ -64,78 +64,113 @@ export default function Login() {
     setError(null);
   }
 
+  const audienceCopy = tab === "staff"
+    ? {
+        eyebrow: "Staff access",
+        title: "Staff sign in",
+        lead: "Manage wholesale orders, customers, and invoices.",
+      }
+    : {
+        eyebrow: "Customer access",
+        title: "Customer sign in",
+        lead: "Place orders and manage your wholesale coffee account.",
+      };
+
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <div className="login-logo">
-          <img src="/logo.png" alt="Ground Control" />
-          <span>Wholesale</span>
+    <main className="login-screen">
+      <section className="login-context" aria-label="Ground Control Wholesale">
+        <div className="login-brand">
+          <img src="/logo.png" alt="" className="login-brand-logo" />
+          <span>Ground Control <span>/ Wholesale</span></span>
         </div>
 
-        <div className="login-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={tab === "staff"}
-            className={tab === "staff" ? "active" : ""}
-            onClick={() => resetFlow("staff")}
-          >
-            Staff
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === "customer"}
-            className={tab === "customer" ? "active" : ""}
-            onClick={() => resetFlow("customer")}
-          >
-            Customer
-          </button>
+        <div className="login-context-copy">
+          <p className="eyebrow">Ground Control Coffee</p>
+          <h1>Wholesale<br />Coffee Portal</h1>
+          <p className="login-context-lead">
+            Place orders and manage your wholesale coffee account.
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="login-form">
-          {step === "code" && (
-            <p className="login-help">
-              Enter the code sent to {email}.
-            </p>
-          )}
-          <label>
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              autoFocus
-              disabled={step === "code"}
-            />
-          </label>
-          {step === "code" && (
+        <span className="login-location">Farmington, MI</span>
+      </section>
+
+      <section className="login-form-wrap">
+        <div className="login-panel">
+          <div className="login-tabs" role="tablist" aria-label="Sign-in audience">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "staff"}
+              className={tab === "staff" ? "active" : ""}
+              onClick={() => resetFlow("staff")}
+            >
+              Staff
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "customer"}
+              className={tab === "customer" ? "active" : ""}
+              onClick={() => resetFlow("customer")}
+            >
+              Customer
+            </button>
+          </div>
+
+          <p className="eyebrow">{audienceCopy.eyebrow}</p>
+          <h2>{audienceCopy.title}</h2>
+          <p className="login-form-lead">{audienceCopy.lead}</p>
+
+          {error && <p className="login-error" role="alert">{error}</p>}
+
+          <form onSubmit={handleSubmit} className="login-form">
+            {step === "code" && (
+              <p className="login-help">
+                Enter the one-time code sent to <strong>{email}</strong>.
+              </p>
+            )}
             <label>
-              Sign-in code
+              Email address
               <input
-                type="text"
-                inputMode="numeric"
-                value={code}
-                onChange={(e) => setCode(e.target.value.trim())}
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@company.com"
                 required
-                autoComplete="one-time-code"
+                autoComplete="email"
                 autoFocus
+                disabled={step === "code"}
               />
             </label>
-          )}
-          {error && <p className="login-error" role="alert">{error}</p>}
-          <button type="submit" disabled={loading} className="login-submit">
-            {loading
-              ? step === "email" ? "Sending code…" : "Signing in…"
-              : step === "email" ? "Send sign-in code" : "Sign in"}
-          </button>
-          {step === "code" && (
-            <button type="button" className="login-link" onClick={() => resetFlow()}>
-              Use a different email
+            {step === "code" && (
+              <label>
+                Sign-in code
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.trim())}
+                  placeholder="Enter your code"
+                  required
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </label>
+            )}
+            <button type="submit" disabled={loading} className="login-submit">
+              {loading
+                ? step === "email" ? "Sending code…" : "Signing in…"
+                : step === "email" ? "Send sign-in code" : "Sign in"}
             </button>
-          )}
-        </form>
-      </div>
-    </div>
+            {step === "code" && (
+              <button type="button" className="login-link" onClick={() => resetFlow()}>
+                Use a different email
+              </button>
+            )}
+          </form>
+        </div>
+      </section>
+    </main>
   );
 }

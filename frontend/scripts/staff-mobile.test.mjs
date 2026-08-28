@@ -5,12 +5,16 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), "utf8");
 
-test("staff layout switches from sidebar to mobile header", () => {
+test("staff layout uses an off-canvas mobile navigation", () => {
   const css = read("src/components/StaffLayout.css");
+  const layout = read("src/components/StaffLayout.tsx");
   assert.match(css, /@media \(max-width: 700px\)/);
-  assert.match(css, /\.staff-shell\s*\{\s*flex-direction: column/);
-  assert.match(css, /\.staff-sidebar\s*\{[\s\S]*?width: 100%/);
-  assert.match(css, /\.sidebar-nav\s*\{[\s\S]*?grid-template-columns: repeat\(3, 1fr\)/);
+  assert.match(css, /\.staff-shell\s*\{[^}]*grid-template-columns:\s*1fr/);
+  assert.match(css, /\.staff-sidebar\s*\{[\s\S]*?position:\s*fixed[\s\S]*?transform:\s*translateX\(-105%\)/);
+  assert.match(css, /\.staff-sidebar\.open\s*\{[^}]*transform:\s*translateX\(0\)/);
+  assert.match(css, /\.staff-nav-backdrop\.open\s*\{[^}]*position:\s*fixed/);
+  assert.match(layout, /className="staff-mobile-menu"/);
+  assert.match(layout, /aria-expanded=\{navigationOpen\}/);
 });
 
 test("staff tables become labeled cards on mobile", () => {

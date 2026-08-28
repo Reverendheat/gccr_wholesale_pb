@@ -132,6 +132,11 @@ export interface CatalogVariation {
 
 export type WholesaleAudience = "grocery" | "cafe_restaurant";
 
+export interface GrindOption {
+  modifier_id?: string;
+  name: "Whole Bean" | "Drip";
+}
+
 export interface CatalogItem {
   id: string;
   type: string;
@@ -141,10 +146,13 @@ export interface CatalogItem {
     variations: CatalogVariation[];
   };
   wholesale_audiences: WholesaleAudience[];
+  grind_options?: GrindOption[];
 }
 
 export interface LineItemInput {
   variation_id: string;
+  grind_modifier_id?: string;
+  grind?: string;
   quantity: number;
   note?: string;
   name?: string;

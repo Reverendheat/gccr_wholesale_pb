@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test:pwa": "node --test scripts/pwa.test.mjs",
     "test:staff-mobile": "node --test scripts/staff-mobile.test.mjs",
+    "test:shadcn": "node --test scripts/shadcn-redesign.test.mjs",
     "test:order-edit": "node --test scripts/order-edit.test.mjs",
     "test:customer-lookup": "node --test scripts/customer-lookup.test.mjs",
     "test:customer-cart": "node --test scripts/customer-cart.test.mjs",
