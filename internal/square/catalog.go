@@ -41,6 +41,8 @@ func (c *Client) validateWholesaleCatalogConfig() error {
 		{"SQUARE_WHOLESALE_GROCERY_ATTRIBUTE_ID", c.WholesaleGroceryAttributeID},
 		{"SQUARE_WHOLESALE_CAFE_RESTAURANT_ATTRIBUTE_ID", c.WholesaleCafeRestaurantAttributeID},
 		{"SQUARE_WHOLESALE_CUSTOMER_ALLOWLIST_ATTRIBUTE_ID", c.WholesaleCustomerAllowlistAttributeID},
+		{"SQUARE_WHOLESALE_GRIND_MODIFIER_LIST_ID", c.WholesaleGrindModifierListID},
+		{"SQUARE_WHOLESALE_DRIP_MODIFIER_ID", c.WholesaleDripModifierID},
 	}
 	for _, field := range required {
 		if field.value == "" {
@@ -110,58 +112,55 @@ func customerAllowlist(
 }
 
 func (c *Client) addGrindOptions(ctx context.Context, items []WholesaleCatalogItem) error {
-	modifierListIDs := map[string]struct{}{}
+	hasConfiguredList := false
 	for _, item := range items {
 		for _, info := range item.ItemData.ModifierListInfo {
-			if info != nil && info.ModifierListID != "" {
-				modifierListIDs[info.ModifierListID] = struct{}{}
+			if info != nil && info.ModifierListID == c.WholesaleGrindModifierListID {
+				hasConfiguredList = true
+				break
 			}
 		}
 	}
-	if len(modifierListIDs) == 0 {
+	if !hasConfiguredList {
 		return nil
 	}
 
-	ids := make([]string, 0, len(modifierListIDs))
-	for id := range modifierListIDs {
-		ids = append(ids, id)
-	}
 	resp, err := c.SDK.Catalog.BatchGet(ctx, &squaresdk.BatchGetCatalogObjectsRequest{
-		ObjectIDs: ids,
+		ObjectIDs: []string{c.WholesaleGrindModifierListID},
 	})
 	if err != nil {
 		return fmt.Errorf("square: load catalog modifiers: %w", err)
 	}
 
-	optionsByListID := map[string][]GrindOption{}
+	var options []GrindOption
 	for _, obj := range resp.Objects {
-		if obj == nil || obj.ModifierList == nil || obj.ModifierList.ModifierListData == nil {
+		if obj == nil || obj.ModifierList == nil || obj.ModifierList.ID != c.WholesaleGrindModifierListID ||
+			obj.ModifierList.ModifierListData == nil {
 			continue
 		}
-		data := obj.ModifierList.ModifierListData
-		if data.Name == nil || !strings.EqualFold(strings.TrimSpace(*data.Name), "Ground") {
-			continue
-		}
-		for _, modifier := range data.Modifiers {
-			if modifier == nil || modifier.Modifier == nil || modifier.Modifier.ModifierData == nil ||
-				modifier.Modifier.ModifierData.Name == nil ||
-				!strings.EqualFold(strings.TrimSpace(*modifier.Modifier.ModifierData.Name), "Drip") {
+		for _, modifier := range obj.ModifierList.ModifierListData.Modifiers {
+			if modifier == nil || modifier.Modifier == nil || modifier.Modifier.ID != c.WholesaleDripModifierID {
 				continue
 			}
-			optionsByListID[obj.ModifierList.ID] = []GrindOption{
+			options = []GrindOption{
 				{Name: "Whole Bean"},
-				{ModifierID: modifier.Modifier.ID, Name: "Drip"},
+				{ModifierID: c.WholesaleDripModifierID, Name: "Drip"},
 			}
 			break
 		}
 	}
 
+	if len(options) == 0 {
+		return fmt.Errorf(
+			"square: configured drip modifier %q was not found in modifier list %q",
+			c.WholesaleDripModifierID,
+			c.WholesaleGrindModifierListID,
+		)
+	}
+
 	for i := range items {
 		for _, info := range items[i].ItemData.ModifierListInfo {
-			if info == nil {
-				continue
-			}
-			if options := optionsByListID[info.ModifierListID]; len(options) > 0 {
+			if info != nil && info.ModifierListID == c.WholesaleGrindModifierListID {
 				items[i].GrindOptions = append([]GrindOption(nil), options...)
 				break
 			}

@@ -22,6 +22,8 @@ const (
 	testGroceryAttributeID   = "grocery-attribute-id"
 	testCafeAttributeID      = "cafe-attribute-id"
 	testAllowlistAttributeID = "allowlist-attribute-id"
+	testGrindModifierListID  = "grind-modifier-list-id"
+	testDripModifierID       = "drip-modifier-id"
 	testCustomerID           = "customer-1"
 )
 
@@ -34,6 +36,8 @@ func newCatalogTestClient(baseURL string) *Client {
 		WholesaleGroceryAttributeID:           testGroceryAttributeID,
 		WholesaleCafeRestaurantAttributeID:    testCafeAttributeID,
 		WholesaleCustomerAllowlistAttributeID: testAllowlistAttributeID,
+		WholesaleGrindModifierListID:          testGrindModifierListID,
+		WholesaleDripModifierID:               testDripModifierID,
 	}
 }
 
@@ -208,6 +212,73 @@ func TestGetWholesaleCatalog_AccessPolicy(t *testing.T) {
 	}
 }
 
+func TestGetWholesaleCatalog_UsesConfiguredGrindModifierIDs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v2/customers/" + testCustomerID:
+			json.NewEncoder(w).Encode(map[string]any{
+				"customer": map[string]any{"id": testCustomerID, "group_ids": []string{testGroceryGroupID}},
+			})
+		case "/v2/catalog/search-catalog-items":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{{
+					"id": "ITEM1", "type": "ITEM",
+					"custom_attribute_values": testAttributes(true, false, nil),
+					"item_data": map[string]any{
+						"name": "Coffee",
+						"modifier_list_info": []map[string]any{{
+							"modifier_list_id": testGrindModifierListID,
+							"enabled":          true,
+						}},
+						"variations": []map[string]any{{
+							"id": "VARIATION1", "type": "ITEM_VARIATION",
+							"item_variation_data": map[string]any{
+								"item_id": "ITEM1", "name": "1 kg bag", "pricing_type": "FIXED_PRICING",
+								"price_money": map[string]any{"amount": 2500, "currency": "USD"},
+							},
+						}},
+					},
+				}},
+			})
+		case "/v2/catalog/batch-retrieve":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode batch catalog request: %v", err)
+			}
+			if got := body["object_ids"]; !reflect.DeepEqual(got, []any{testGrindModifierListID}) {
+				t.Errorf("object_ids = %#v", got)
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"objects": []map[string]any{{
+					"id": testGrindModifierListID, "type": "MODIFIER_LIST",
+					"modifier_list_data": map[string]any{
+						"name": "Grind Setting", "selection_type": "SINGLE",
+						"modifiers": []map[string]any{{
+							"id": testDripModifierID, "type": "MODIFIER",
+							"modifier_data": map[string]any{
+								"name": "Drip Coffee", "modifier_list_id": testGrindModifierListID,
+							},
+						}},
+					},
+				}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	items, err := newCatalogTestClient(srv.URL).GetWholesaleCatalog(context.Background(), testCustomerID)
+	if err != nil {
+		t.Fatalf("GetWholesaleCatalog: %v", err)
+	}
+	want := []GrindOption{{Name: "Whole Bean"}, {ModifierID: testDripModifierID, Name: "Drip"}}
+	if len(items) != 1 || !reflect.DeepEqual(items[0].GrindOptions, want) {
+		t.Fatalf("grind options = %#v, want %#v", items, want)
+	}
+}
+
 func TestGetWholesaleCatalog_RequiresAllConfiguration(t *testing.T) {
 	tests := []struct {
 		envName string
@@ -219,6 +290,8 @@ func TestGetWholesaleCatalog_RequiresAllConfiguration(t *testing.T) {
 		{"SQUARE_WHOLESALE_GROCERY_ATTRIBUTE_ID", func(c *Client) { c.WholesaleGroceryAttributeID = "" }},
 		{"SQUARE_WHOLESALE_CAFE_RESTAURANT_ATTRIBUTE_ID", func(c *Client) { c.WholesaleCafeRestaurantAttributeID = "" }},
 		{"SQUARE_WHOLESALE_CUSTOMER_ALLOWLIST_ATTRIBUTE_ID", func(c *Client) { c.WholesaleCustomerAllowlistAttributeID = "" }},
+		{"SQUARE_WHOLESALE_GRIND_MODIFIER_LIST_ID", func(c *Client) { c.WholesaleGrindModifierListID = "" }},
+		{"SQUARE_WHOLESALE_DRIP_MODIFIER_ID", func(c *Client) { c.WholesaleDripModifierID = "" }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.envName, func(t *testing.T) {

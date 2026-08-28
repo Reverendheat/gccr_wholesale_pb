@@ -42,6 +42,8 @@ func main() {
 		WholesaleGroceryAttributeID:           os.Getenv("SQUARE_WHOLESALE_GROCERY_ATTRIBUTE_ID"),
 		WholesaleCafeRestaurantAttributeID:    os.Getenv("SQUARE_WHOLESALE_CAFE_RESTAURANT_ATTRIBUTE_ID"),
 		WholesaleCustomerAllowlistAttributeID: os.Getenv("SQUARE_WHOLESALE_CUSTOMER_ALLOWLIST_ATTRIBUTE_ID"),
+		WholesaleGrindModifierListID:          os.Getenv("SQUARE_WHOLESALE_GRIND_MODIFIER_LIST_ID"),
+		WholesaleDripModifierID:               os.Getenv("SQUARE_WHOLESALE_DRIP_MODIFIER_ID"),
 	}
 	if sqCfg.AccessToken == "" {
 		log.Fatal("SQUARE_ACCESS_TOKEN environment variable is required")
@@ -63,6 +65,12 @@ func main() {
 	}
 	if sqCfg.WholesaleCustomerAllowlistAttributeID == "" {
 		log.Fatal("SQUARE_WHOLESALE_CUSTOMER_ALLOWLIST_ATTRIBUTE_ID environment variable is required")
+	}
+	if sqCfg.WholesaleGrindModifierListID == "" {
+		log.Fatal("SQUARE_WHOLESALE_GRIND_MODIFIER_LIST_ID environment variable is required")
+	}
+	if sqCfg.WholesaleDripModifierID == "" {
+		log.Fatal("SQUARE_WHOLESALE_DRIP_MODIFIER_ID environment variable is required")
 	}
 
 	locationID := os.Getenv("SQUARE_LOCATION_ID")

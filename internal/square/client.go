@@ -16,6 +16,8 @@ type Client struct {
 	WholesaleGroceryAttributeID           string
 	WholesaleCafeRestaurantAttributeID    string
 	WholesaleCustomerAllowlistAttributeID string
+	WholesaleGrindModifierListID          string
+	WholesaleDripModifierID               string
 }
 
 // Config holds Square API configuration loaded from environment variables.
@@ -28,6 +30,8 @@ type Config struct {
 	WholesaleGroceryAttributeID           string
 	WholesaleCafeRestaurantAttributeID    string
 	WholesaleCustomerAllowlistAttributeID string
+	WholesaleGrindModifierListID          string
+	WholesaleDripModifierID               string
 }
 
 // New creates a new Square Client from the provided config.
@@ -46,5 +50,7 @@ func New(cfg Config) *Client {
 		WholesaleGroceryAttributeID:           cfg.WholesaleGroceryAttributeID,
 		WholesaleCafeRestaurantAttributeID:    cfg.WholesaleCafeRestaurantAttributeID,
 		WholesaleCustomerAllowlistAttributeID: cfg.WholesaleCustomerAllowlistAttributeID,
+		WholesaleGrindModifierListID:          cfg.WholesaleGrindModifierListID,
+		WholesaleDripModifierID:               cfg.WholesaleDripModifierID,
 	}
 }

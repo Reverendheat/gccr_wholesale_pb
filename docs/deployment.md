@@ -101,6 +101,8 @@ Store following values in `/wholesale/env`. Square token, location, and category
 SQUARE_ACCESS_TOKEN=...
 SQUARE_LOCATION_ID=...
 SQUARE_WHOLESALE_CATEGORY_ID=...
+SQUARE_WHOLESALE_GRIND_MODIFIER_LIST_ID=...
+SQUARE_WHOLESALE_DRIP_MODIFIER_ID=...
 SQUARE_SANDBOX=false
 
 SQUARE_WEBHOOK_URL=https://wholesale.example.com/api/webhooks/square
@@ -125,7 +127,7 @@ PB_SMTP_AUTH_METHOD=PLAIN
 PB_SMTP_TLS=false
 ```
 
-`SQUARE_SANDBOX=true` uses Square sandbox. Sandbox and production use different access tokens, location IDs, customer records, category IDs, and catalog records.
+`SQUARE_SANDBOX=true` uses Square sandbox. Sandbox and production use different access tokens, location IDs, customer records, category IDs, modifier IDs, and catalog records. `SQUARE_WHOLESALE_GRIND_MODIFIER_LIST_ID` identifies modifier list attached to wholesale coffees; `SQUARE_WHOLESALE_DRIP_MODIFIER_ID` identifies drip-grind choice within that list. Display names may differ between environments.
 
 `ORS_API_KEY` is server-only OpenRouteService credential used for delivery address geocoding and driving routes. Square location selected by `SQUARE_LOCATION_ID` must have coordinates or complete physical address. Delivery is limited to `DELIVERY_MAX_MILES`. Orders below merchandise subtotal `DELIVERY_FREE_MINIMUM_CENTS` pay `ceil(driving miles) × DELIVERY_RATE_CENTS_PER_MILE`; defaults are 30 miles, $100, and $0.50/mile.
 
@@ -220,6 +222,8 @@ Required startup values:
 - `SQUARE_ACCESS_TOKEN`
 - `SQUARE_LOCATION_ID`
 - `SQUARE_WHOLESALE_CATEGORY_ID`
+- `SQUARE_WHOLESALE_GRIND_MODIFIER_LIST_ID`
+- `SQUARE_WHOLESALE_DRIP_MODIFIER_ID`
 - `ORS_API_KEY`
 
 Missing required value causes app restart loop with error in logs.
