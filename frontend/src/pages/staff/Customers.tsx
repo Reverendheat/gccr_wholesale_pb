@@ -6,6 +6,7 @@ import {
   fetchCustomers,
   inviteCustomer,
   previewCustomer,
+  updateCompanyBilling,
   updateCustomerAudienceAccess,
   type CompanyRecord,
   type CustomerAudienceAccess,
@@ -243,6 +244,157 @@ function AudienceAccessModal({
   );
 }
 
+function BillingModal({
+  company,
+  onClose,
+  onSaved,
+}: {
+  company: CompanyRecord;
+  onClose: () => void;
+  onSaved: (company: CompanyRecord) => void;
+}) {
+  const [emails, setEmails] = useState<string[]>(company.billingEmails ?? []);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const nextFocus = useRef<number | null>(null);
+
+  useEffect(() => {
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    cardRef.current?.querySelector<HTMLElement>("input, button")?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      trigger?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (nextFocus.current === null) return;
+    const inputs = cardRef.current?.querySelectorAll<HTMLInputElement>("input");
+    const target = inputs?.[Math.min(nextFocus.current, inputs.length - 1)];
+    (target ?? cardRef.current?.querySelector<HTMLButtonElement>("[data-add-email]"))?.focus();
+    nextFocus.current = null;
+  }, [emails.length]);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const normalized = emails.map((email) => email.trim()).filter(Boolean);
+    if (normalized.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      setError("Enter a valid email address in each row, or remove it.");
+      return;
+    }
+    const seen = new Set<string>();
+    const recipients = normalized.filter((email) => {
+      const key = email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    cardRef.current?.focus();
+    setSaving(true);
+    setError(null);
+    try {
+      onSaved(await updateCompanyBilling(company.id, recipients));
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Could not update billing emails");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => { if (!saving) onClose(); }}>
+      <div
+        ref={cardRef}
+        className="modal-card billing-modal"
+        role="dialog"
+        tabIndex={-1}
+        aria-modal="true"
+        aria-labelledby="billing-title"
+        aria-describedby="billing-description"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !saving) {
+            event.stopPropagation();
+            onClose();
+          }
+          if (event.key !== "Tab") return;
+          const focusable = cardRef.current?.querySelectorAll<HTMLElement>("input:not(:disabled), button:not(:disabled)");
+          if (!focusable?.length) {
+            event.preventDefault();
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (document.activeElement === cardRef.current) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+          } else if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}
+      >
+        <h3 id="billing-title">Manage billing · {company.name}</h3>
+        <p id="billing-description" className="muted modal-desc">
+          Invoices go only to these addresses. Leave blank to use the buyer’s account email.
+          Changes apply to new invoices for this company.
+        </p>
+        <form onSubmit={handleSubmit} className="invite-form" noValidate aria-busy={saving}>
+          {emails.map((email, index) => (
+            <div className="billing-email-row" key={index}>
+              <label>
+                Billing email {index + 1}
+                <input
+                  type="email"
+                  autoComplete="off"
+                  value={email}
+                  disabled={saving}
+                  onChange={(event) => setEmails((current) => current.map((value, i) => i === index ? event.target.value : value))}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn-secondary"
+                aria-label={`Remove billing email ${index + 1}`}
+                disabled={saving}
+                onClick={() => {
+                  nextFocus.current = index;
+                  setEmails((current) => current.filter((_, i) => i !== index));
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn-secondary"
+            data-add-email
+            disabled={saving}
+            onClick={() => {
+              nextFocus.current = emails.length;
+              setEmails((current) => [...current, ""]);
+            }}
+          >
+            Add billing email
+          </button>
+          {error && <p className="staff-error modal-error" role="alert">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" disabled={saving}>{saving ? "Saving…" : "Save billing emails"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Customers() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [companies, setCompanies] = useState<CompanyRecord[]>([]);
@@ -253,6 +405,7 @@ export default function Customers() {
   const [assigning, setAssigning] = useState<string | null>(null);
   const [orderingFor, setOrderingFor] = useState<CustomerRecord | null>(null);
   const [audienceFor, setAudienceFor] = useState<CustomerRecord | null>(null);
+  const [billingFor, setBillingFor] = useState<CompanyRecord | null>(null);
 
   useEffect(() => {
     Promise.all([fetchCustomers(), fetchCompanies()])
@@ -297,6 +450,16 @@ export default function Customers() {
       ? `${customerName} catalog access: ${enabled.join(" and ")}.`
       : `${customerName} has no standard catalog access.`);
     setAudienceFor(null);
+    setTimeout(() => setSuccessMsg(null), 6000);
+  }
+
+  function handleBillingSaved(company: CompanyRecord) {
+    setCompanies((current) => current.map((item) => item.id === company.id ? company : item));
+    setCustomers((current) => current.map((customer) => customer.company === company.id
+      ? { ...customer, expand: { ...customer.expand, company } }
+      : customer));
+    setBillingFor(null);
+    setSuccessMsg(`Billing emails updated for ${company.name}. Existing invoice recipients are unchanged.`);
     setTimeout(() => setSuccessMsg(null), 6000);
   }
 
@@ -401,6 +564,17 @@ export default function Customers() {
                     ))}
                     <option value="__new">+ Create new account…</option>
                   </select>
+                  {customer.company && (
+                    <button
+                      type="button"
+                      className="account-reconcile"
+                      disabled={assigning === customer.id || !companies.some((company) => company.id === customer.company)}
+                      onClick={() => setBillingFor(companies.find((company) => company.id === customer.company) ?? null)}
+                      aria-label={`Manage billing for ${companies.find((company) => company.id === customer.company)?.name || "wholesale account"}`}
+                    >
+                      Manage billing
+                    </button>
+                  )}
                   {!customer.company && (
                     <button
                       type="button"
@@ -431,6 +605,14 @@ export default function Customers() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {billingFor && (
+        <BillingModal
+          company={billingFor}
+          onClose={() => setBillingFor(null)}
+          onSaved={handleBillingSaved}
+        />
       )}
 
       {orderingFor && (

@@ -121,7 +121,7 @@ Open **Orders**, then select row to view details:
 | `pending` | New customer order | Confirm, cancel, or send invoice |
 | `confirmed` | Accepted for fulfillment | Mark delivered, cancel, or send invoice |
 | `delivered` | Fulfilled | Cancel or send invoice |
-| `invoiced` | Square invoice sent | Wait for Square payment webhook |
+| `invoiced` | Square invoice published; check email delivery separately | Retry unsent emails if needed; wait for Square payment webhook |
 | `paid` | Square reported invoice paid | No normal action |
 | `cancelled` | Order cancelled | No normal action |
 | `needs_review` | Square/local state requires manual review | Review records; UI allows cancellation |
@@ -130,25 +130,30 @@ Do not manually edit records in PocketBase. Direct collection updates are locked
 
 ## Send an invoice
 
-Invoice can be sent when order:
+A new invoice can be created for a `pending`, `confirmed`, or `delivered` order that does not already have an invoice attempt.
 
-- Does not already have Square invoice
-- Is not `paid`, `cancelled`, or `needs_review`
+To configure recipients, open **Customers → Manage billing** for the wholesale account. Add one or more billing emails, or remove all addresses to use the order buyer's portal account email. A configured list replaces the buyer's email; the buyer is not automatically copied. Billing settings apply to the company attached to the order, even if the buyer later moves to another account.
 
 From order detail:
 
 1. Review customer, fulfillment details, locked prices, items, notes, and status.
-2. Select **Send invoice**.
-3. Application creates Square order from locked local snapshot, adds any `Local delivery` fee line, then creates invoice due 30 days from current date.
-4. Square emails payment request to customer.
-5. Invoice link appears in order detail and **Invoices** tab.
+2. Review the displayed invoice recipients, then select **Send invoice**.
+3. Application creates the Square order from the locked snapshot, adds any `Local delivery` fee line, and creates an invoice due in 30 days.
+4. The portal emails the same Square payment link individually to the selected recipients using its configured mail service. Square does not send an additional invoice email.
+5. Invoice link and email delivery progress appear in order detail and the **Invoices** tab.
 6. Square webhook updates local status after payment, cancellation, or refund.
+
+If creation or publication fails, **Resume invoice** continues the saved attempt. If an email fails, **Retry unsent emails** sends only to the remaining recipients, using a refreshed link to the same invoice. Already-sent recipients are not intentionally emailed again. “Sent” means the mail service accepted the message, not that it reached the inbox.
+
+Recipients are saved when the invoice attempt starts; later company billing changes do not redirect that invoice. Existing invoices created before portal delivery remain managed by Square and cannot be retried through this email flow.
+
+New invoices use Square's manual-sharing mode: automatic invoice receipts and update/cancellation emails are disabled. The portal does not configure reminders. Do not add Square reminders to these invoices: Square sends them to the original Square customer, not the portal billing list.
 
 Do not edit order line items directly in Square. Cancel and recreate invoice through normal workflow when correction is required. Never send second invoice directly in Square without reconciling local order record.
 
 ## Invoices tab
 
-Invoices tab lists orders with Square invoice ID. Use **View invoice** to open Square invoice URL. If payment happened but status is not `paid`, ask administrator to verify webhook delivery/signature and app logs.
+The **Invoices** tab lists published invoices and saved attempts, with recipient and email delivery status. Open the order to resume an attempt or retry unsent emails. Use **View invoice** to open the Square payment page. If payment happened but status is not `paid`, ask an administrator to verify webhook delivery/signature and app logs.
 
 ## Customer support
 

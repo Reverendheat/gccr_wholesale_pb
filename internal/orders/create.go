@@ -235,6 +235,7 @@ func UpdatePending(
 ) (*core.Record, error) {
 	if order.GetString("status") != "pending" ||
 		order.GetString("squareOrderId") != "" ||
+		order.GetString("invoiceDraftRequest") != "" && order.GetString("invoiceDraftRequest") != "null" ||
 		order.GetString("squareInvoiceId") != "" {
 		return nil, fmt.Errorf("only pending orders not yet submitted to Square can be edited")
 	}
@@ -273,6 +274,7 @@ func UpdateByStaff(
 	status := order.GetString("status")
 	if (status != "pending" && status != "confirmed") ||
 		order.GetString("squareOrderId") != "" ||
+		order.GetString("invoiceDraftRequest") != "" && order.GetString("invoiceDraftRequest") != "null" ||
 		order.GetString("squareInvoiceId") != "" {
 		return nil, fmt.Errorf("staff can only edit pending or confirmed orders before Square submission")
 	}

@@ -115,7 +115,7 @@ Contact GCCR staff about existing order changes or cancellations.
 | `pending` | Received and awaiting staff confirmation |
 | `confirmed` | Accepted for fulfillment |
 | `delivered` | Marked delivered by staff |
-| `invoiced` | Square invoice sent |
+| `invoiced` | Square invoice published; payment link available |
 | `paid` | Square reported payment complete |
 | `cancelled` | Order cancelled |
 | `needs_review` | Staff needs to reconcile order or payment state |
@@ -124,10 +124,12 @@ Contact GCCR staff about existing order changes or cancellations.
 
 When staff sends invoice:
 
-1. Square emails invoice/payment request.
+1. GCCR Wholesale emails the Square payment link to your company's configured billing addresses, or to the order buyer's portal account email when no billing addresses are configured. The buyer is not automatically copied when a billing list is set.
 2. **Account Orders** shows **View invoice** link to all members of wholesale account.
 3. Open link and follow Square payment instructions.
 4. After payment, status updates to `paid` when Square webhook is processed.
+
+Contact GCCR staff to change company billing addresses. Existing invoices keep their original recipients. New portal-delivered invoices do not include Square's automatic invoice receipt or update/cancellation emails; older invoices sent by Square retain their existing delivery behavior.
 
 If payment succeeded but portal does not update, contact GCCR staff with order number and Square receipt/invoice reference. Do not submit payment twice.
 
