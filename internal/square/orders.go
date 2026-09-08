@@ -39,5 +39,21 @@ func (c *Client) CreateOrder(
 		return nil, fmt.Errorf("square: CreateOrder: %w", err)
 	}
 
+	if resp == nil || resp.Order == nil || resp.Order.ID == nil || *resp.Order.ID == "" {
+		return nil, fmt.Errorf("square: CreateOrder returned no order ID")
+	}
+	return resp.Order, nil
+}
+
+// GetOrder preserves the customer already attached to an existing Square order.
+func (c *Client) GetOrder(ctx context.Context, orderID string) (*squaresdk.Order, error) {
+	resp, err := c.SDK.Orders.Get(ctx, &squaresdk.GetOrdersRequest{OrderID: orderID})
+	if err != nil {
+		return nil, fmt.Errorf("square: GetOrder: %w", err)
+	}
+	if resp == nil || resp.Order == nil || resp.Order.ID == nil || *resp.Order.ID != orderID ||
+		resp.Order.CustomerID == nil || *resp.Order.CustomerID == "" || resp.Order.LocationID == "" {
+		return nil, fmt.Errorf("square: order response is missing its original customer or location")
+	}
 	return resp.Order, nil
 }

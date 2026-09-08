@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import {
+  fetchInvoiceDelivery,
   fetchStaffOrders,
+  InvoiceRequestError,
   sendInvoice,
   sendOrderEvent,
   type CustomerRecord,
+  type InvoiceDelivery,
   type Order,
   type OrderEvent,
   type StaffOrderResult,
@@ -55,8 +58,38 @@ function OrderDrawer({
   const [savingEvent, setSavingEvent] = useState<OrderEvent | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [invoicing, setInvoicing] = useState(false);
+  const [delivery, setDelivery] = useState<InvoiceDelivery | null>(null);
+  const [deliveryLoading, setDeliveryLoading] = useState(true);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const customer = order.expand?.customer;
   const actions = availableActions(order.status);
+  const invoiceEligible = ["pending", "confirmed", "delivered", "invoiced"].includes(order.status);
+  const showDelivery = invoiceEligible || !!order.squareInvoiceId || !!order.invoiceRecipients?.length;
+
+  useEffect(() => {
+    if (!showDelivery) return;
+    let active = true;
+    fetchInvoiceDelivery(order.id)
+      .then((preview) => { if (active) setDelivery(preview); })
+      .catch((cause: unknown) => {
+        if (active) setDeliveryError(cause instanceof Error ? cause.message : "Could not load invoice recipients");
+      })
+      .finally(() => { if (active) setDeliveryLoading(false); });
+    return () => { active = false; };
+  }, [order.id, showDelivery]);
+
+  async function refreshDelivery() {
+    setDeliveryLoading(true);
+    setDeliveryError(null);
+    try {
+      setDelivery(await fetchInvoiceDelivery(order.id));
+    } catch (cause: unknown) {
+      setDeliveryError(cause instanceof Error ? cause.message : "Could not load invoice recipients");
+    } finally {
+      setDeliveryLoading(false);
+    }
+  }
 
   async function handleOrderEvent(event: OrderEvent) {
     setSavingEvent(event);
@@ -72,25 +105,42 @@ function OrderDrawer({
   }
 
   async function handleSendInvoice() {
+    if (!canSendInvoice || !delivery) return;
     setInvoicing(true);
-    setSaveError(null);
+    setInvoiceError(null);
     try {
-      const result = await sendInvoice(order.id);
+      const result = await sendInvoice(order.id, delivery.recipients);
       onOrderUpdate(result.order);
+      setDelivery(result.delivery);
+      if (!result.notification_sent) {
+        setInvoiceError(result.invoice_url
+          ? "Invoice created; email failed. Only pending recipients will be retried."
+          : "Invoice creation or publication is incomplete; emails have not been sent. Resume to continue the same invoice.");
+      }
     } catch (e: unknown) {
-      setSaveError(e instanceof Error ? e.message : "Failed to send invoice");
+      setInvoiceError(e instanceof InvoiceRequestError && e.status === 409
+        ? "Invoice recipients or order details changed. Review the refreshed preview before sending again."
+        : e instanceof Error ? e.message : "Failed to send invoice");
+      await refreshDelivery();
     } finally {
       setInvoicing(false);
     }
   }
 
   const canSendInvoice =
-    !order.squareInvoiceId &&
-    !["paid", "cancelled", "needs_review"].includes(order.status);
+    invoiceEligible &&
+    !deliveryLoading &&
+    !deliveryError &&
+    !invoicing &&
+    savingEvent === null &&
+    !!delivery?.recipients.length &&
+    ((delivery.status === "not_created" && !delivery.error) ||
+      (delivery.status === "pending" && delivery.pending_recipients.length > 0));
   const canEdit =
     ["pending", "confirmed"].includes(order.status) &&
     !order.squareOrderId &&
-    !order.squareInvoiceId;
+    !order.squareInvoiceId &&
+    !order.invoiceRecipients?.length;
 
   return (
     <>
@@ -242,7 +292,7 @@ function OrderDrawer({
               <h4 className="drawer-section-title">Actions</h4>
               <div className="workflow-actions">
                 {canEdit && (
-                  <button className="btn-action" onClick={onEdit} disabled={savingEvent !== null}>
+                  <button className="btn-action" onClick={onEdit} disabled={savingEvent !== null || invoicing}>
                     Edit order
                   </button>
                 )}
@@ -251,7 +301,7 @@ function OrderDrawer({
                     key={action.event}
                     className={action.danger ? "btn-action btn-action-danger" : "btn-action"}
                     onClick={() => handleOrderEvent(action.event)}
-                    disabled={savingEvent !== null}
+                    disabled={savingEvent !== null || invoicing}
                   >
                     {savingEvent === action.event ? "Saving…" : action.label}
                   </button>
@@ -263,46 +313,101 @@ function OrderDrawer({
           {/* Invoice */}
           <section className="drawer-section">
             <h4 className="drawer-section-title">Invoice</h4>
-            {order.squareInvoiceId ? (
-              <div className="invoice-sent">
-                <span className="invoice-sent-label">Invoice sent</span>
-                <span className="mono invoice-id">{order.squareInvoiceId}</span>
-                {order.squareInvoiceUrl && (
-                  <a
-                    href={order.squareInvoiceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="invoice-link"
-                  >
-                    View invoice ↗
-                  </a>
-                )}
-              </div>
-            ) : canSendInvoice ? (
-              <div className="invoice-action">
-                <p className="meta-sub">
-                  Sends a payment request email to the customer via Square.
-                  Due date is set to 30 days from today.
-                </p>
-                <button
-                  className="btn-send-invoice"
-                  onClick={handleSendInvoice}
-                  disabled={invoicing}
+            <div className="invoice-action" aria-busy={deliveryLoading || invoicing}>
+              {order.squareInvoiceId && <span className="mono invoice-id">{order.squareInvoiceId}</span>}
+              {order.squareInvoiceUrl && (
+                <a
+                  href={order.squareInvoiceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="invoice-link"
                 >
-                  {invoicing ? "Sending…" : "Send Invoice"}
-                </button>
-              </div>
-            ) : (
-              <p className="muted">
-                {order.status === "paid"
-                  ? "Order is already paid."
-                  : order.status === "cancelled"
-                    ? "Cannot invoice a cancelled order."
-                    : order.status === "needs_review"
-                      ? "Review this order before invoicing."
-                    : "No Square order linked."}
-              </p>
-            )}
+                  View invoice
+                </a>
+              )}
+              {showDelivery && deliveryLoading && <p className="muted" role="status">Loading invoice recipients…</p>}
+              {deliveryError && (
+                <>
+                  <p className="staff-error" role="alert">{deliveryError}. Sending is disabled until recipients can be reviewed.</p>
+                  <button type="button" className="btn-secondary" onClick={refreshDelivery} disabled={deliveryLoading || invoicing}>
+                    Reload recipients
+                  </button>
+                </>
+              )}
+              {invoiceError && <p className="staff-error" role="alert">{invoiceError}</p>}
+              {!deliveryLoading && !deliveryError && delivery && (
+                delivery.status === "legacy" ? (
+                  <p className="meta-sub">
+                    Sent using Square’s email delivery. Manage this existing invoice in Square.
+                  </p>
+                ) : (
+                  <>
+                    <p className="meta-sub">
+                      The portal emails one Square invoice link to each address below.
+                      {delivery.status === "not_created" && " Payment is due 30 days from invoice creation."}
+                    </p>
+                    <strong className={delivery.status === "sent" ? "invoice-sent-label" : undefined}>
+                      {delivery.status === "sent" ? "Invoice emails sent" : delivery.status === "pending" ? "Invoice delivery pending" : "Review invoice recipients"}
+                    </strong>
+                    {delivery.status !== "not_created" && (
+                      <p className="meta-sub">Company changes won’t change this invoice’s recipients.</p>
+                    )}
+                    <ul className="invoice-recipients" aria-label="Invoice recipients">
+                      {delivery.recipients.map((email) => (
+                        <li key={email}>
+                          {email}
+                          {delivery.status !== "not_created" && (delivery.sent_recipients.some((sent) => sent.toLowerCase() === email.toLowerCase())
+                            ? " — Sent"
+                            : " — Pending")}
+                        </li>
+                      ))}
+                    </ul>
+                    {delivery.recipients.length === 0 && (
+                      <p className="staff-error" role="alert">No valid recipients are available. Update company billing or the buyer’s portal account email, then reload recipients.</p>
+                    )}
+                    {delivery.status === "not_created" && (
+                      <button type="button" className="btn-secondary" onClick={refreshDelivery} disabled={invoicing}>
+                        Reload recipients
+                      </button>
+                    )}
+                    {delivery.status === "sent" && order.invoiceEmailSentAt && (
+                      <p className="meta-sub">Sent {new Date(order.invoiceEmailSentAt.replace(" ", "T")).toLocaleString()}</p>
+                    )}
+                    {delivery.error && <p className="staff-error" role="alert">{delivery.error}</p>}
+                    {delivery.status === "pending" && !invoiceError && (
+                      <p className={delivery.error ? "staff-error" : "meta-sub"}>
+                        {order.squareInvoiceUrl
+                          ? delivery.error ? "Invoice created; email failed. Retry sends only to pending recipients." : "Invoice created; emails are pending. Already-sent recipients will not be emailed again."
+                          : "Invoice creation or publication is incomplete. Resume to continue the same invoice before sending emails."}
+                      </p>
+                    )}
+                    {(delivery.status === "not_created" || delivery.status === "pending") && invoiceEligible && (
+                      <button
+                        type="button"
+                        className="btn-send-invoice"
+                        onClick={handleSendInvoice}
+                        disabled={!canSendInvoice}
+                      >
+                        {invoicing ? "Sending…" : delivery.status === "pending"
+                          ? order.squareInvoiceUrl ? "Retry unsent emails" : "Resume invoice"
+                          : "Send invoice"}
+                      </button>
+                    )}
+                  </>
+                )
+              )}
+              {!invoiceEligible && (
+                <p className="muted">
+                  {order.status === "paid"
+                    ? "Order is already paid; invoice emails cannot be sent."
+                    : order.status === "cancelled"
+                      ? "Cannot invoice a cancelled order."
+                      : order.status === "needs_review"
+                        ? "Review this order before invoicing."
+                        : "This order is not eligible for invoicing."}
+                </p>
+              )}
+            </div>
           </section>
         </div>
       </aside>
@@ -407,6 +512,7 @@ export default function Orders() {
 
       {selected && (
         <OrderDrawer
+          key={selected.id}
           order={selected}
           onClose={() => setSelected(null)}
           onOrderUpdate={handleOrderUpdate}

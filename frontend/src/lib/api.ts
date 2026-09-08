@@ -10,6 +10,7 @@ const BASE = "/api/wholesale";
 export interface CompanyRecord {
   id: string;
   name: string;
+  billingEmails?: string[];
 }
 
 export interface CustomerRecord {
@@ -44,6 +45,23 @@ export async function fetchCompanies(): Promise<CompanyRecord[]> {
   });
 }
 
+export async function updateCompanyBilling(
+  companyId: string,
+  billingEmails: string[],
+): Promise<CompanyRecord> {
+  const res = await fetch(`${BASE}/companies/${companyId}/billing`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ billing_emails: billingEmails }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message ?? `Billing update failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.company;
+}
+
 export type OrderEvent =
   | "staff_confirm"
   | "staff_mark_delivered"
@@ -66,20 +84,51 @@ export async function sendOrderEvent(
   return data.order;
 }
 
-export interface SendInvoiceResult {
-  order: Order;
-  invoice_url: string;
+export interface InvoiceDelivery {
+  recipients: string[];
+  sent_recipients: string[];
+  pending_recipients: string[];
+  status: "not_created" | "pending" | "sent" | "legacy";
+  error: string;
 }
 
-export async function sendInvoice(orderId: string): Promise<SendInvoiceResult> {
-  const res = await fetch(`${BASE}/invoices`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ order_id: orderId }),
+export async function fetchInvoiceDelivery(orderId: string): Promise<InvoiceDelivery> {
+  const res = await fetch(`${BASE}/orders/${orderId}/invoice-delivery`, {
+    headers: authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message ?? `Send invoice failed: ${res.status}`);
+    throw new Error(err.message ?? `Invoice delivery fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export class InvoiceRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "InvoiceRequestError";
+    this.status = status;
+  }
+}
+
+export interface SendInvoiceResult {
+  order: Order;
+  invoice_url: string;
+  notification_sent: boolean;
+  delivery: InvoiceDelivery;
+}
+
+export async function sendInvoice(orderId: string, recipients: string[]): Promise<SendInvoiceResult> {
+  const res = await fetch(`${BASE}/invoices`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ order_id: orderId, recipients }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new InvoiceRequestError(err.message ?? `Send invoice failed: ${res.status}`, res.status);
   }
   return res.json();
 }
@@ -225,6 +274,10 @@ export interface Order {
   squareOrderId: string;
   squareInvoiceId: string;
   squareInvoiceUrl: string;
+  invoiceRecipients?: string[];
+  invoiceSentRecipients?: string[];
+  invoiceEmailError?: string;
+  invoiceEmailSentAt?: string;
   created: string;
   expand?: {
     customer?: {

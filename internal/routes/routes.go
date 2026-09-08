@@ -59,6 +59,8 @@ func Register(se *core.ServeEvent, sq *square.Client, locationID string, deliver
 
 	// POST /api/wholesale/invoices — staff sends a Square invoice for an order
 	g.POST("/invoices", handleSendInvoice(sq, locationID))
+	g.GET("/orders/{id}/invoice-delivery", handleInvoiceDelivery())
+	g.PATCH("/companies/{id}/billing", handleUpdateCompanyBilling())
 
 	// Staff-controlled customer operations.
 	g.GET("/customers", handleListCustomers())
@@ -462,6 +464,7 @@ func handleStaffUpdateOrder(sq *square.Client, deliveryQuoter delivery.Quoter) f
 			return e.NotFoundError("Order not found", err)
 		}
 		if (order.GetString("status") != string(fsm.StatusPending) && order.GetString("status") != string(fsm.StatusConfirmed)) ||
+			(order.GetString("invoiceDraftRequest") != "" && order.GetString("invoiceDraftRequest") != "null") ||
 			order.GetString("squareOrderId") != "" || order.GetString("squareInvoiceId") != "" {
 			return e.BadRequestError("Only pending or confirmed orders can be edited before Square submission", nil)
 		}
@@ -680,6 +683,9 @@ func handleOrderEvent() func(*core.RequestEvent) error {
 		if err != nil {
 			return e.NotFoundError("Order not found", err)
 		}
+		if authCollection == "customers" && order.GetString("invoiceDraftRequest") != "" && order.GetString("invoiceDraftRequest") != "null" {
+			return e.BadRequestError("An invoice is being prepared for this order; contact staff", nil)
+		}
 		if authCollection == "customers" && !customerCanCancelOrder(
 			e.Auth.Id,
 			order.GetString("customer"),
@@ -878,91 +884,6 @@ func handleCancelScheduledOrder() func(*core.RequestEvent) error {
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{"cancelled": true})
-	}
-}
-
-type sendInvoiceBody struct {
-	OrderID string `json:"order_id"`
-}
-
-func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestEvent) error {
-	return func(e *core.RequestEvent) error {
-		if e.Auth == nil || e.Auth.Collection().Name != "users" {
-			return e.ForbiddenError("Only staff can send invoices", nil)
-		}
-
-		var body sendInvoiceBody
-		if err := e.BindBody(&body); err != nil {
-			return e.BadRequestError("Invalid request body", err)
-		}
-		if body.OrderID == "" {
-			return e.BadRequestError("order_id is required", nil)
-		}
-
-		order, err := e.App.FindRecordById("orders", body.OrderID)
-		if err != nil {
-			return e.NotFoundError("Order not found", err)
-		}
-
-		if order.GetString("squareInvoiceId") != "" {
-			return e.BadRequestError("Invoice already sent for this order", nil)
-		}
-		next, err := fsm.Apply(fsm.Status(order.GetString("status")), fsm.EventStaffSendInvoice)
-		if err != nil {
-			return e.BadRequestError(err.Error(), err)
-		}
-
-		customerRecord, err := e.App.FindRecordById("customers", order.GetString("customer"))
-		if err != nil {
-			return e.InternalServerError("Could not find customer", err)
-		}
-		squareCustomerID := customerRecord.GetString("squareCustomerId")
-		if squareCustomerID == "" {
-			return e.BadRequestError("Customer has no Square customer ID", nil)
-		}
-
-		squareOrderID, err := orders.SubmitToSquare(
-			e.Request.Context(), e.App, sq, locationID, squareCustomerID, order,
-		)
-		if err != nil {
-			return e.InternalServerError("Could not create Square order", err)
-		}
-
-		// Default due date: 30 days from today.
-		dueDate := time.Now().AddDate(0, 0, 30).Format("2006-01-02")
-
-		invoice, err := sq.CreateAndPublishInvoice(
-			e.Request.Context(),
-			squareOrderID, locationID, squareCustomerID,
-			dueDate, order.Id,
-		)
-		if err != nil {
-			return e.InternalServerError("Could not create Square invoice", err)
-		}
-
-		publicURL := ""
-		if invoice.PublicURL != nil {
-			publicURL = *invoice.PublicURL
-		}
-
-		order.Set("squareInvoiceId", *invoice.ID)
-		order.Set("squareInvoiceUrl", publicURL)
-		order.Set("status", string(next))
-		if err := e.App.Save(order); err != nil {
-			return e.InternalServerError("Could not update order", err)
-		}
-
-		// Re-fetch so response includes server-populated timestamps and expand.
-		order, err = e.App.FindRecordById("orders", order.Id)
-		if err != nil {
-			return e.InternalServerError("Could not refresh order", err)
-		}
-		_ = e.App.ExpandRecord(order, []string{"customer"}, nil)
-
-		return e.JSON(http.StatusOK, map[string]any{
-			"order":       order,
-			"invoice_url": publicURL,
-		})
 	}
 }
 

@@ -72,7 +72,7 @@ Normal customer onboarding happens through staff portal, not PocketBase admin:
 4. Application creates local `customers` auth record referencing Square customer ID and wholesale account.
 5. Customer receives welcome email and uses OTP login.
 
-Square remains source of truth for customer contact and billing details. GCCR Wholesale remains source of truth for wholesale-account membership and shared access.
+Square remains the source of truth for Square customer profiles, invoices, and payments. GCCR Wholesale manages wholesale-account membership, shared access, and company `billingEmails`. Staff edit billing recipients through **Customers → Manage billing**; an empty list falls back to the order buyer's portal account email. The existing company `email` field is not used as a billing override.
 
 Account members can view account orders, invoices, and active schedules. Only schedule creator can cancel schedule. Orders and schedules snapshot account at creation, so later customer reassignment does not move historical records between accounts. First assignment of previously unassigned customer backfills only that customer's unassigned records.
 
@@ -86,6 +86,14 @@ Staff can change assignment from **Customers → Wholesale Account**. Review una
 2. Create test staff/customer in correct collection.
 3. Request OTP from application login screen.
 4. Check app logs and SMTP delivery logs.
+
+### Verify invoice email delivery
+
+New invoices use the same configured PocketBase mail service as portal notifications. Square invoices are published with `SHARE_MANUALLY`; the portal emails the payment link to each selected recipient and records mail-service acceptance separately from invoice/payment status.
+
+Check SMTP logs if an invoice is created but email fails. Staff can retry only unsent recipients without creating another invoice. A crash between SMTP acceptance and saving progress can leave delivery ambiguous; inspect mail logs before retrying after such a failure.
+
+Manual sharing disables Square's automatic invoice receipts and update/cancellation emails. The portal does not schedule reminders; manually added Square reminders still target the original Square customer, not company billing recipients. Older Square-email invoices remain unchanged.
 
 ### Verify Square configuration
 
