@@ -195,7 +195,7 @@ func handleSendInvoice(sq *square.Client, locationID string) func(*core.RequestE
 			if err != nil || customer.GetString("squareCustomerId") == "" {
 				return e.BadRequestError("Order customer has no valid Square customer ID", err)
 			}
-			draft = invoiceDraftRequest{CustomerID: customer.GetString("squareCustomerId"), LocationID: locationID, DueDate: time.Now().AddDate(0, 0, 30).Format("2006-01-02")}
+			draft = invoiceDraftRequest{CustomerID: customer.GetString("squareCustomerId"), LocationID: locationID, DueDate: time.Now().AddDate(0, 0, 15).Format("2006-01-02")}
 			if squareOrderID := order.GetString("squareOrderId"); squareOrderID != "" {
 				squareOrder, err := sq.GetOrder(e.Request.Context(), squareOrderID)
 				if err != nil {
@@ -322,7 +322,7 @@ func deliverInvoice(e *core.RequestEvent, sq *square.Client, order *core.Record,
 			From:    mail.Address{Name: settings.Meta.SenderName, Address: settings.Meta.SenderAddress},
 			To:      []mail.Address{{Address: recipient}},
 			Subject: "Your GCCR Wholesale invoice",
-			HTML:    fmt.Sprintf(`<p>Your GCCR Wholesale invoice for order <strong>%s</strong> is ready.</p><p><a href="%s">View and pay your invoice</a></p><p>Payment terms: Net 30. Due %s.</p>`, html.EscapeString(order.Id), html.EscapeString(paymentURL.String()), html.EscapeString(draft.DueDate)),
+			HTML:    fmt.Sprintf(`<p>Your GCCR Wholesale invoice for order <strong>%s</strong> is ready.</p><p><a href="%s">View and pay your invoice</a></p><p>Payment due %s.</p>`, html.EscapeString(order.Id), html.EscapeString(paymentURL.String()), html.EscapeString(draft.DueDate)),
 		}
 		if err := e.App.NewMailClient().Send(message); err != nil {
 			return fmt.Errorf("Invoice email to %s failed: %w", recipient, err)

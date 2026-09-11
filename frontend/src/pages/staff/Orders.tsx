@@ -344,7 +344,7 @@ function OrderDrawer({
                   <>
                     <p className="meta-sub">
                       The portal emails one Square invoice link to each address below.
-                      {delivery.status === "not_created" && " Payment is due 30 days from invoice creation."}
+                      {delivery.status === "not_created" && " Payment is due 15 days from invoice creation."}
                     </p>
                     <strong className={delivery.status === "sent" ? "invoice-sent-label" : undefined}>
                       {delivery.status === "sent" ? "Invoice emails sent" : delivery.status === "pending" ? "Invoice delivery pending" : "Review invoice recipients"}

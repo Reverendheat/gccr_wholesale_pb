@@ -138,12 +138,12 @@ From order detail:
 
 1. Review customer, fulfillment details, locked prices, items, notes, and status.
 2. Review the displayed invoice recipients, then select **Send invoice**.
-3. Application creates the Square order from the locked snapshot, adds any `Local delivery` fee line, and creates an invoice due in 30 days.
+3. Application creates the Square order from the locked snapshot, adds any `Local delivery` fee line, and creates an invoice due in 15 days.
 4. The portal emails the same Square payment link individually to the selected recipients using its configured mail service. Square does not send an additional invoice email.
 5. Invoice link and email delivery progress appear in order detail and the **Invoices** tab.
 6. Square webhook updates local status after payment, cancellation, or refund.
 
-If creation or publication fails, **Resume invoice** continues the saved attempt. If an email fails, **Retry unsent emails** sends only to the remaining recipients, using a refreshed link to the same invoice. Already-sent recipients are not intentionally emailed again. “Sent” means the mail service accepted the message, not that it reached the inbox.
+If creation or publication fails, **Resume invoice** continues the saved attempt with its original due date. Existing invoices and saved attempts retain their due dates when the default payment terms change. If an email fails, **Retry unsent emails** sends only to the remaining recipients, using a refreshed link to the same invoice. Already-sent recipients are not intentionally emailed again. “Sent” means the mail service accepted the message, not that it reached the inbox.
 
 Recipients are saved when the invoice attempt starts; later company billing changes do not redirect that invoice. Existing invoices created before portal delivery remain managed by Square and cannot be retried through this email flow.
 
