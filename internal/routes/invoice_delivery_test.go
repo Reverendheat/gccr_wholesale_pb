@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -267,7 +268,9 @@ func TestInvoicePartialMailFailureRetriesOnlyPendingRecipients(t *testing.T) {
 		links = append(links, e.Message.HTML)
 		return nil
 	})
+	beforeSend := time.Now().AddDate(0, 0, 15).Format("2006-01-02")
 	result := postInvoice(t, app, staff, order, sq, []string{"first@example.com", "second@example.com"})
+	afterSend := time.Now().AddDate(0, 0, 15).Format("2006-01-02")
 	if string(result["notification_sent"]) != "false" {
 		t.Fatalf("false success: %s", result["notification_sent"])
 	}
@@ -291,6 +294,19 @@ func TestInvoicePartialMailFailureRetriesOnlyPendingRecipients(t *testing.T) {
 	}
 	if create.Invoice.DeliveryMethod != "SHARE_MANUALLY" || create.Invoice.PrimaryRecipient.CustomerID != "ORIGINAL_CUSTOMER" || create.Invoice.LocationID != "ORIGINAL_LOC" {
 		t.Fatalf("changed Square ownership/delivery: %+v", create)
+	}
+	if len(create.Invoice.PaymentRequests) != 1 {
+		t.Fatalf("expected one balance payment request: %+v", create.Invoice.PaymentRequests)
+	}
+	var dueDate string
+	if err := json.Unmarshal(create.Invoice.PaymentRequests[0]["due_date"], &dueDate); err != nil {
+		t.Fatal(err)
+	}
+	if dueDate != beforeSend && dueDate != afterSend {
+		t.Fatalf("invoice due date = %s, want 15 days from creation (%s or %s)", dueDate, beforeSend, afterSend)
+	}
+	if !strings.Contains(links[0], dueDate) {
+		t.Fatal("invoice email omitted the Square payment due date")
 	}
 	for _, request := range create.Invoice.PaymentRequests {
 		if len(request["reminders"]) != 0 || len(request["automatic_payment_source"]) != 0 {
