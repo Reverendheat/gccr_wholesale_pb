@@ -607,17 +607,21 @@ func handleListOrders() func(*core.RequestEvent) error {
 
 		var records []*core.Record
 		var err error
+		page, hasMore := 1, false
 
 		switch e.Auth.Collection().Name {
 		case "users":
-			records, err = e.App.FindRecordsByFilter(
-				"orders", "id != ''", "-id", 100, 0,
-			)
+			opts, parseErr := parseOrderListOptions(e.Request.URL.Query())
+			if parseErr != nil {
+				return e.BadRequestError(parseErr.Error(), nil)
+			}
+			page = opts.Page
+			records, hasMore, err = findStaffOrderPage(e.App, opts)
 		case "customers":
 			records, err = e.App.FindRecordsByFilter(
 				"orders",
 				customerRecordFilter(e.Auth.Id, e.Auth.GetString("company"), false),
-				"-id", 100, 0,
+				"-created,-id", 100, 0,
 			)
 		default:
 			return e.ForbiddenError("Unknown account type", nil)
@@ -629,7 +633,7 @@ func handleListOrders() func(*core.RequestEvent) error {
 
 		for _, rec := range records {
 			if e.Auth.Collection().Name == "users" {
-				_ = e.App.ExpandRecord(rec, []string{"customer"}, nil)
+				_ = e.App.ExpandRecord(rec, []string{"customer", "company"}, nil)
 				rec.Set("placementReason", rec.GetString("placementNote"))
 				addStaffEditHistory(rec)
 			} else {
@@ -640,7 +644,7 @@ func handleListOrders() func(*core.RequestEvent) error {
 			}
 		}
 
-		return e.JSON(http.StatusOK, map[string]any{"orders": records})
+		return e.JSON(http.StatusOK, map[string]any{"orders": records, "page": page, "has_more": hasMore})
 	}
 }
 

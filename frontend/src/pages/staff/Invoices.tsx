@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { fetchStaffOrders, type Order } from "../../lib/api";
+import { type Order } from "../../lib/api";
+import OrderListControls, { OrderPagination } from "./OrderListControls";
+import { useStaffOrders } from "../../lib/useStaffOrders";
+import { orderTotalCents } from "../../lib/orderTotal";
 import "./Orders.css";
 
 function formatDate(iso: string): string {
@@ -39,23 +41,7 @@ function InvoiceDeliverySummary({ order }: { order: Order }) {
 }
 
 export default function Invoices() {
-  const [invoiced, setInvoiced] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchStaffOrders()
-      .then((orders) =>
-        setInvoiced(orders.filter((o) => o.squareInvoiceId || o.invoiceRecipients?.length))
-      )
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load invoices")
-      )
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <p className="muted">Loading invoices…</p>;
-  if (error) return <p className="staff-error">{error}</p>;
+  const { orders: invoiced, loading, error, page, hasMore, apply, changePage } = useStaffOrders(true);
 
   return (
     <div className="staff-view">
@@ -68,16 +54,18 @@ export default function Invoices() {
           </p>
         </div>
       </div>
-      {invoiced.length === 0 ? (
-        <div className="staff-empty">No invoices created yet.</div>
+      <OrderListControls invoices onApply={apply} />
+      {loading ? <p className="muted" role="status">Loading invoices…</p> : error ? <p className="staff-error" role="alert">{error}</p> : invoiced.length === 0 ? (
+        <div className="staff-empty">No matching invoices.</div>
       ) : (
         <table className="orders-table">
           <thead>
             <tr>
               <th>Square Invoice ID</th>
               <th>Order #</th>
-              <th>Date</th>
-              <th>Customer</th>
+              <th>Order date</th>
+              <th>Customer / Company</th>
+              <th>Total</th>
               <th>Status</th>
               <th>Email delivery</th>
               <th>Invoice</th>
@@ -88,8 +76,12 @@ export default function Invoices() {
               <tr key={o.id}>
                 <td className="mono" data-label="Square Invoice">{o.squareInvoiceId || "Not created yet"}</td>
                 <td className="mono" data-label="Order #">{o.id.slice(0, 8)}</td>
-                <td data-label="Date">{formatDate(o.created)}</td>
-                <td data-label="Customer">{o.expand?.customer?.name ?? <span className="mono">{o.customer.slice(0, 8)}</span>}</td>
+                <td data-label="Order date">{formatDate(o.created)}</td>
+                <td data-label="Customer / Company"><div>
+                  {o.expand?.customer?.name ?? <span className="mono">{o.customer.slice(0, 8)}</span>}
+                  {o.expand?.company && <div className="meta-sub">{o.expand.company.name}</div>}
+                </div></td>
+                <td data-label="Total">{new Intl.NumberFormat("en-US", { style: "currency", currency: o.lineItems[0]?.currency || "USD" }).format(orderTotalCents(o) / 100)}</td>
                 <td data-label="Status">
                   <span className={`status-badge status-${o.status}`}>
                     {o.status}
@@ -115,6 +107,7 @@ export default function Invoices() {
           </tbody>
         </table>
       )}
+      <OrderPagination page={page} hasMore={hasMore} loading={loading || !!error} onPage={changePage} />
     </div>
   );
 }

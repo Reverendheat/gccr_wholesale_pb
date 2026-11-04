@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   fetchInvoiceDelivery,
-  fetchStaffOrders,
   InvoiceRequestError,
   sendInvoice,
   sendOrderEvent,
@@ -12,6 +11,9 @@ import {
   type StaffOrderResult,
 } from "../../lib/api";
 import StaffOrderModal from "./StaffOrderModal";
+import OrderListControls, { OrderPagination } from "./OrderListControls";
+import { useStaffOrders } from "../../lib/useStaffOrders";
+import { orderTotalCents } from "../../lib/orderTotal";
 import "./Orders.css";
 
 function formatDate(iso: string): string {
@@ -416,25 +418,14 @@ function OrderDrawer({
 }
 
 export default function Orders() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { orders, loading, error, page, hasMore, apply, changePage, refresh } = useStaffOrders();
   const [selected, setSelected] = useState<Order | null>(null);
   const [editing, setEditing] = useState<Order | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchStaffOrders()
-      .then(setOrders)
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load orders")
-      )
-      .finally(() => setLoading(false));
-  }, []);
-
   function handleOrderUpdate(updated: Order) {
-    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
     setSelected(updated);
+    refresh();
   }
 
   function handleStaffEdit(result: StaffOrderResult) {
@@ -444,9 +435,6 @@ export default function Orders() {
       : "Order updated, but customer notification email failed.");
     window.setTimeout(() => setSuccess(null), 6000);
   }
-
-  if (loading) return <p className="muted">Loading orders…</p>;
-  if (error) return <p className="staff-error">{error}</p>;
 
   return (
     <div className="staff-view">
@@ -459,17 +447,19 @@ export default function Orders() {
           </p>
         </div>
       </div>
+      <OrderListControls onApply={apply} />
       {success && <p className="staff-success">{success}</p>}
-      {orders.length === 0 ? (
-        <div className="staff-empty">No orders yet.</div>
+      {loading ? <p className="muted" role="status">Loading orders…</p> : error ? <p className="staff-error" role="alert">{error}</p> : orders.length === 0 ? (
+        <div className="staff-empty">No matching orders.</div>
       ) : (
         <table className="orders-table orders-table-clickable">
           <thead>
             <tr>
               <th>Order #</th>
               <th>Date</th>
-              <th>Customer</th>
+              <th>Customer / Company</th>
               <th>Items</th>
+              <th>Total</th>
               <th>Square Order</th>
               <th>Status</th>
             </tr>
@@ -485,14 +475,14 @@ export default function Orders() {
                 >
                   <td className="mono" data-label="Order #">{o.id.slice(0, 8)}</td>
                   <td data-label="Date">{formatDate(o.created)}</td>
-                  <td data-label="Customer">
-                    {customer ? (
-                      customer.name
-                    ) : (
-                      <span className="mono">{o.customer.slice(0, 8)}</span>
-                    )}
+                  <td data-label="Customer / Company">
+                    <div>
+                      {customer ? customer.name : <span className="mono">{o.customer.slice(0, 8)}</span>}
+                      {o.expand?.company && <div className="meta-sub">{o.expand.company.name}</div>}
+                    </div>
                   </td>
                   <td data-label="Items">{o.lineItems.length} item(s)</td>
+                  <td data-label="Total">{formatMoney(orderTotalCents(o), o.lineItems[0]?.currency)}</td>
                   <td className="mono" data-label="Square Order">
                     {o.squareOrderId
                       ? o.squareOrderId.slice(0, 10) + "…"
@@ -509,6 +499,8 @@ export default function Orders() {
           </tbody>
         </table>
       )}
+
+      <OrderPagination page={page} hasMore={hasMore} loading={loading || !!error} onPage={changePage} />
 
       {selected && (
         <OrderDrawer

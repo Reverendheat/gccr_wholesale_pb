@@ -280,6 +280,7 @@ export interface Order {
   invoiceEmailSentAt?: string;
   created: string;
   expand?: {
+    company?: { id: string; name: string };
     customer?: {
       id: string;
       name: string;
@@ -289,11 +290,26 @@ export interface Order {
   };
 }
 
-export async function fetchStaffOrders(): Promise<Order[]> {
-  const res = await fetch(`${BASE}/orders`, { headers: authHeaders() });
+export interface OrderListFilters {
+  q: string;
+  status: string;
+  company: string;
+  from: string;
+  to: string;
+  sort: string;
+}
+
+export interface OrderPage {
+  orders: Order[];
+  page: number;
+  has_more: boolean;
+}
+
+export async function fetchStaffOrders(filters: OrderListFilters, page: number, invoices: boolean): Promise<OrderPage> {
+  const query = new URLSearchParams({ ...filters, page: String(page), invoices: String(invoices) });
+  const res = await fetch(`${BASE}/orders?${query}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Orders fetch failed: ${res.status}`);
-  const data = await res.json();
-  return data.orders ?? [];
+  return res.json();
 }
 
 export type ScheduleFrequency = "weekly" | "biweekly" | "monthly" | "quarterly";

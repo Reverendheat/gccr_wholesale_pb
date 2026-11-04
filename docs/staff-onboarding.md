@@ -43,6 +43,21 @@ On phones, navigation moves to top of screen and table rows become labeled cards
 
 All staff records currently have same permissions.
 
+## Find and sort orders or invoices
+
+Both staff lists default to newest **order creation date** first (invoices also use the order date, not the Square invoice issue date).
+
+- Search by company, customer name/email, order ID, Square order ID, or Square invoice ID.
+- Filter by status, wholesale company, and an inclusive order-date range. Date boundaries use UTC, as labeled in the controls.
+- Sort newest/oldest, company A–Z, or order total high/low. Total includes locked merchandise prices and delivery fees, not additional Square invoice adjustments or taxes.
+- Use the one-tap status buttons for common views. Search applies automatically after a short pause (or press Enter).
+- Select **Filters** for additional statuses, company, dates, and sorting. Changes apply immediately; there is no Apply step. On phones, advanced controls stay collapsed until needed, with full-size touch targets and no automatic input zoom.
+- Active advanced filters appear as removable chips. Select a chip to remove that filter, or **Clear all** to reset search, status, filters, and sorting.
+- Use **Previous / Next** to browse 25 results per page. Filters apply to the full order history before pagination.
+- In **Invoices**, tap **Unpaid** to show published invoices whose local order status is `invoiced`. Paid, cancelled, refunded/needs-review records and incomplete invoice attempts are excluded. Payment status depends on Square webhook updates; this is not a live Square balance check.
+
+Company names and totals appear on both lists. Orders that have no assigned company remain visible under **All companies**. Order updates refresh the current page so changed records no longer matching the filter disappear from that list.
+
 ## Invite a customer
 
 Before invitation, customer must already exist in currently selected Square environment with exact email address.
